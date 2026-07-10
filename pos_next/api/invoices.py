@@ -718,6 +718,11 @@ def update_invoice(data):
 		else:
 			invoice_doc = frappe.get_doc(data)
 
+
+		invoice_doc.commercial_register = (
+			frappe.get_value("Commercial Register", {"is_default": 1}, "name")
+		)
+
 		# Important: set before set_missing_values()/pricing/validation paths that may
 		# read linked docs (e.g., Customer) and trigger controller permission checks.
 		invoice_doc.flags.ignore_permissions = True

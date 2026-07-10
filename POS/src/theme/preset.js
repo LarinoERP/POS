@@ -1,0 +1,482 @@
+import { definePreset } from "@primeuix/themes";
+import Material from "@primeuix/themes/material";
+
+const ModernPreset = definePreset(Material, {
+	semantic: {
+		primary: {
+			50: "{indigo.50}",
+			100: "{indigo.100}",
+			200: "{indigo.200}",
+			300: "{indigo.300}",
+			400: "{indigo.400}",
+			500: "{indigo.500}",
+			600: "{indigo.600}",
+			700: "{indigo.700}",
+			800: "{indigo.800}",
+			900: "{indigo.900}",
+			950: "{indigo.950}",
+		},
+		borderRadius: {
+			none: "0",
+			xs: "2px",
+			sm: "4px",
+			md: "6px",
+			lg: "8px",
+			xl: "12px",
+		},
+		focusRing: {
+			width: "2px",
+			style: "solid",
+			color: "{primary.color}",
+			offset: "0",
+			shadow: "none",
+		},
+		formField: {
+			paddingX: "0.75rem",
+			paddingY: "0.5rem",
+			sm: {
+				fontSize: "0.75rem",
+				paddingX: "0.625rem",
+				paddingY: "0.375rem",
+			},
+			lg: {
+				fontSize: "1rem",
+				paddingX: "0.875rem",
+				paddingY: "0.625rem",
+			},
+			borderRadius: "{border.radius.md}",
+			focusRing: {
+				width: "2px",
+				style: "solid",
+				color: "{primary.color}",
+				offset: "-1px",
+				shadow: "none",
+			},
+			transitionDuration: "0.15s",
+		},
+		overlay: {
+			select: {
+				shadow: "0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.05)",
+			},
+			popover: {
+				padding: "0.75rem",
+				shadow: "0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.05)",
+			},
+			modal: {
+				padding: "1.25rem",
+				shadow: "0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04)",
+			},
+			navigation: {
+				shadow: "0 4px 6px -1px rgb(0 0 0 / 0.08)",
+			},
+		},
+		colorScheme: {
+			light: {
+				focusRing: {
+					shadow: "0 0 1px 4px {surface.200}",
+				},
+				surface: {
+					0: "#ffffff",
+					50: "{gray.50}",
+					100: "{gray.100}",
+					200: "{gray.200}",
+					300: "{gray.300}",
+					400: "{gray.400}",
+					500: "{gray.500}",
+					600: "{gray.600}",
+					700: "{gray.700}",
+					800: "{gray.800}",
+					900: "{gray.900}",
+					950: "{gray.950}",
+				},
+				primary: {
+					color: "{primary.500}",
+					contrastColor: "#ffffff",
+					hoverColor: "{primary.600}",
+					activeColor: "{primary.700}",
+				},
+				highlight: {
+					background: "color-mix(in srgb, {primary.color}, transparent 92%)",
+					focusBackground: "color-mix(in srgb, {primary.color}, transparent 80%)",
+					color: "{primary.700}",
+					focusColor: "{primary.800}",
+				},
+				mask: {
+					background: "rgba(0,0,0,0.4)",
+					color: "{surface.200}",
+				},
+				formField: {
+					background: "{surface.0}",
+					disabledBackground: "{surface.100}",
+					filledBackground: "{surface.50}",
+					filledHoverBackground: "{surface.100}",
+					filledFocusBackground: "{surface.50}",
+					borderColor: "{surface.300}",
+					hoverBorderColor: "{surface.400}",
+					focusBorderColor: "{primary.color}",
+					invalidBorderColor: "{red.500}",
+					color: "{surface.900}",
+					disabledColor: "{surface.400}",
+					placeholderColor: "{surface.400}",
+					invalidPlaceholderColor: "{red.500}",
+					floatLabelColor: "{surface.500}",
+					floatLabelFocusColor: "{primary.600}",
+					floatLabelActiveColor: "{surface.500}",
+					floatLabelInvalidColor: "{form.field.invalid.placeholder.color}",
+					iconColor: "{surface.400}",
+					shadow: "none",
+				},
+				text: {
+					color: "{surface.900}",
+					hoverColor: "{surface.900}",
+					mutedColor: "{surface.500}",
+					hoverMutedColor: "{surface.500}",
+				},
+				content: {
+					background: "{surface.0}",
+					hoverBackground: "{surface.50}",
+					borderColor: "{surface.200}",
+					color: "{text.color}",
+					hoverColor: "{text.hover.color}",
+				},
+				overlay: {
+					select: {
+						background: "{surface.0}",
+						borderColor: "{surface.200}",
+						color: "{text.color}",
+					},
+					popover: {
+						background: "{surface.0}",
+						borderColor: "{surface.200}",
+						color: "{text.color}",
+					},
+					modal: {
+						background: "{surface.0}",
+						borderColor: "transparent",
+						color: "{text.color}",
+					},
+				},
+				list: {
+					option: {
+						focusBackground: "{surface.50}",
+						selectedBackground: "{highlight.background}",
+						selectedFocusBackground: "{highlight.focus.background}",
+						color: "{text.color}",
+						focusColor: "{text.hover.color}",
+						selectedColor: "{highlight.color}",
+						selectedFocusColor: "{highlight.focus.color}",
+						icon: {
+							color: "{surface.500}",
+							focusColor: "{surface.500}",
+						},
+					},
+					optionGroup: {
+						background: "transparent",
+						color: "{text.color}",
+					},
+				},
+				navigation: {
+					item: {
+						focusBackground: "{surface.50}",
+						activeBackground: "{surface.100}",
+						color: "{text.color}",
+						focusColor: "{text.hover.color}",
+						activeColor: "{text.hover.color}",
+						icon: {
+							color: "{surface.500}",
+							focusColor: "{surface.500}",
+							activeColor: "{surface.500}",
+						},
+					},
+					submenuLabel: {
+						background: "transparent",
+						color: "{text.color}",
+					},
+					submenuIcon: {
+						color: "{surface.500}",
+						focusColor: "{surface.500}",
+						activeColor: "{surface.500}",
+					},
+				},
+			},
+			dark: {
+				focusRing: {
+					shadow: "0 0 1px 4px {surface.700}",
+				},
+				surface: {
+					0: "#ffffff",
+					50: "{zinc.50}",
+					100: "{zinc.100}",
+					200: "{zinc.200}",
+					300: "{zinc.300}",
+					400: "{zinc.400}",
+					500: "{zinc.500}",
+					600: "{zinc.600}",
+					700: "{zinc.700}",
+					800: "{zinc.800}",
+					900: "{zinc.900}",
+					950: "{zinc.950}",
+				},
+				primary: {
+					color: "{primary.400}",
+					contrastColor: "{surface.900}",
+					hoverColor: "{primary.300}",
+					activeColor: "{primary.200}",
+				},
+				highlight: {
+					background: "color-mix(in srgb, {primary.400}, transparent 84%)",
+					focusBackground: "color-mix(in srgb, {primary.400}, transparent 76%)",
+					color: "rgba(255,255,255,.87)",
+					focusColor: "rgba(255,255,255,.87)",
+				},
+				mask: {
+					background: "rgba(0,0,0,0.6)",
+					color: "{surface.200}",
+				},
+				formField: {
+					background: "{surface.950}",
+					disabledBackground: "{surface.800}",
+					filledBackground: "{surface.800}",
+					filledHoverBackground: "{surface.700}",
+					filledFocusBackground: "{surface.800}",
+					borderColor: "{surface.700}",
+					hoverBorderColor: "{surface.600}",
+					focusBorderColor: "{primary.color}",
+					invalidBorderColor: "{red.400}",
+					color: "{surface.0}",
+					disabledColor: "{surface.500}",
+					placeholderColor: "{surface.500}",
+					invalidPlaceholderColor: "{red.400}",
+					floatLabelColor: "{surface.500}",
+					floatLabelFocusColor: "{primary.color}",
+					floatLabelActiveColor: "{surface.500}",
+					floatLabelInvalidColor: "{form.field.invalid.placeholder.color}",
+					iconColor: "{surface.500}",
+					shadow: "none",
+				},
+				text: {
+					color: "{surface.0}",
+					hoverColor: "{surface.0}",
+					mutedColor: "{surface.400}",
+					hoverMutedColor: "{surface.400}",
+				},
+				content: {
+					background: "{surface.900}",
+					hoverBackground: "{surface.800}",
+					borderColor: "{surface.700}",
+					color: "{text.color}",
+					hoverColor: "{text.hover.color}",
+				},
+				overlay: {
+					select: {
+						background: "{surface.900}",
+						borderColor: "{surface.700}",
+						color: "{text.color}",
+					},
+					popover: {
+						background: "{surface.900}",
+						borderColor: "{surface.700}",
+						color: "{text.color}",
+					},
+					modal: {
+						background: "{surface.900}",
+						borderColor: "transparent",
+						color: "{text.color}",
+					},
+				},
+				list: {
+					option: {
+						focusBackground: "{surface.800}",
+						selectedBackground: "{highlight.background}",
+						selectedFocusBackground: "{highlight.focus.background}",
+						color: "{text.color}",
+						focusColor: "{text.hover.color}",
+						selectedColor: "{highlight.color}",
+						selectedFocusColor: "{highlight.focus.color}",
+						icon: {
+							color: "{surface.500}",
+							focusColor: "{surface.500}",
+						},
+					},
+					optionGroup: {
+						background: "transparent",
+						color: "{text.muted.color}",
+					},
+				},
+				navigation: {
+					item: {
+						focusBackground: "{surface.800}",
+						activeBackground: "{surface.700}",
+						color: "{text.color}",
+						focusColor: "{text.hover.color}",
+						activeColor: "{text.hover.color}",
+						icon: {
+							color: "{surface.500}",
+							focusColor: "{surface.500}",
+							activeColor: "{surface.500}",
+						},
+					},
+					submenuLabel: {
+						background: "transparent",
+						color: "{text.muted.color}",
+					},
+					submenuIcon: {
+						color: "{surface.500}",
+						focusColor: "{surface.500}",
+						activeColor: "{surface.500}",
+					},
+				},
+			},
+		},
+	},
+	components: {
+		button: {
+			root: {
+				borderRadius: "{border.radius.md}",
+				roundedBorderRadius: "2rem",
+				gap: "0.5rem",
+				paddingX: "1rem",
+				paddingY: "0.5rem",
+				iconOnlyWidth: "2.5rem",
+				sm: {
+					fontSize: "{form.field.sm.font.size}",
+					paddingX: "0.625rem",
+					paddingY: "0.375rem",
+					iconOnlyWidth: "2rem",
+				},
+				lg: {
+					fontSize: "{form.field.lg.font.size}",
+					paddingX: "1.25rem",
+					paddingY: "0.625rem",
+					iconOnlyWidth: "3rem",
+				},
+				label: {
+					fontWeight: "500",
+				},
+				raisedShadow: "none",
+				focusRing: {
+					width: "{focus.ring.width}",
+					style: "{focus.ring.style}",
+					offset: "{focus.ring.offset}",
+				},
+				badgeSize: "1rem",
+				transitionDuration: "{form.field.transition.duration}",
+			},
+		},
+		dialog: {
+			root: {
+				background: "{overlay.modal.background}",
+				borderColor: "{overlay.modal.border.color}",
+				color: "{overlay.modal.color}",
+				borderRadius: "{border.radius.xl}",
+				shadow: "{overlay.modal.shadow}",
+			},
+			header: {
+				padding: "1rem 1.25rem 0.5rem",
+				gap: "0.5rem",
+			},
+			title: {
+				fontSize: "1.125rem",
+				fontWeight: "600",
+			},
+			content: {
+				padding: "0.5rem 1.25rem 1rem",
+			},
+			footer: {
+				padding: "0 1.25rem 1rem",
+				gap: "0.5rem",
+			},
+		},
+		card: {
+			root: {
+				background: "{content.background}",
+				borderRadius: "{border.radius.lg}",
+				color: "{content.color}",
+				shadow: "0 1px 2px 0 rgb(0 0 0 / 0.03)",
+			},
+			body: {
+				padding: "1rem",
+				gap: "0.75rem",
+			},
+			caption: {
+				gap: "0.5rem",
+			},
+			title: {
+				fontSize: "1.125rem",
+				fontWeight: "600",
+			},
+			subtitle: {
+				color: "{text.muted.color}",
+			},
+		},
+		inputtext: {
+			root: {
+				background: "{form.field.background}",
+				disabledBackground: "{form.field.disabled.background}",
+				filledBackground: "{form.field.filled.background}",
+				filledHoverBackground: "{form.field.filled.hover.background}",
+				filledFocusBackground: "{form.field.filled.focus.background}",
+				borderColor: "{form.field.border.color}",
+				hoverBorderColor: "{form.field.hover.border.color}",
+				focusBorderColor: "{form.field.focus.border.color}",
+				invalidBorderColor: "{form.field.invalid.border.color}",
+				color: "{form.field.color}",
+				disabledColor: "{form.field.disabled.color}",
+				placeholderColor: "{form.field.placeholder.color}",
+				invalidPlaceholderColor: "{form.field.invalid.placeholder.color}",
+				shadow: "{form.field.shadow}",
+				paddingX: "{form.field.padding.x}",
+				paddingY: "{form.field.padding.y}",
+				borderRadius: "{form.field.border.radius}",
+				focusRing: {
+					width: "{form.field.focus.ring.width}",
+					style: "{form.field.focus.ring.style}",
+					color: "{form.field.focus.ring.color}",
+					offset: "{form.field.focus.ring.offset}",
+					shadow: "{form.field.focus.ring.shadow}",
+				},
+				transitionDuration: "{form.field.transition.duration}",
+				sm: {
+					fontSize: "{form.field.sm.font.size}",
+					paddingX: "{form.field.sm.padding.x}",
+					paddingY: "{form.field.sm.padding.y}",
+				},
+				lg: {
+					fontSize: "{form.field.lg.font.size}",
+					paddingX: "{form.field.lg.padding.x}",
+					paddingY: "{form.field.lg.padding.y}",
+				},
+			},
+		},
+		badge: {
+			root: {
+				borderRadius: "{border.radius.sm}",
+				padding: "0 0.375rem",
+				fontSize: "0.75rem",
+				fontWeight: "600",
+				minWidth: "1.25rem",
+				height: "1.25rem",
+			},
+			dot: {
+				size: "0.5rem",
+			},
+			sm: {
+				fontSize: "0.625rem",
+				minWidth: "1rem",
+				height: "1rem",
+			},
+			lg: {
+				fontSize: "0.875rem",
+				minWidth: "1.5rem",
+				height: "1.5rem",
+			},
+			xl: {
+				fontSize: "1rem",
+				minWidth: "1.75rem",
+				height: "1.75rem",
+			},
+		},
+	},
+});
+
+export default ModernPreset;

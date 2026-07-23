@@ -98,6 +98,71 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 	const posProfile = ref(null);
 	const cartItems = ref([]);
 
+	// Customer used to price the visible grid when the POS Profile forces the
+	// customer price list. Null = price against the profile's selling price list.
+	// Only the visible-grid fetch paths pass this; background offline sync always
+	// caches at the profile price list so the offline catalog stays consistent.
+	const pricingCustomer = ref(null);
+
+	/**
+	 * Extra params merged into visible-grid get_items* calls so item rates
+	 * reflect the selected customer's price list when the feature is active.
+	 * @returns {Object} { customer } or {} when no pricing customer is set.
+	 */
+	function pricingParams() {
+		return pricingCustomer.value ? { customer: pricingCustomer.value } : {};
+	}
+
+	/**
+	 * Cache items to IndexedDB ONLY when they are priced at the profile's price
+	 * list (no pricing customer active). This prevents customer-specific rates
+	 * from contaminating the offline catalog, which must stay profile-priced.
+	 * @param {Array} items - Items to cache
+	 * @param {number} [batchSize] - Optional worker batch size
+	 * @returns {Promise<any>|undefined}
+	 */
+	function cacheItemsIfProfilePriced(items, batchSize) {
+		if (pricingCustomer.value) return undefined; // customer-priced — don't cache
+		return offlineWorker.cacheItems(items, batchSize);
+	}
+
+	/**
+	 * Set (or clear) the customer used to price the visible grid and refresh it.
+	 *
+	 * Called when the cart customer changes AND the POS Profile forces the
+	 * customer price list. Passing a falsy value resets pricing to the profile's
+	 * selling price list. When online, the grid is re-fetched from the server so
+	 * displayed rates reflect the new price list; when offline the cached
+	 * (profile-priced) grid is shown as a best-effort fallback.
+	 *
+	 * @param {string|null} customerName - Customer whose price list to use, or null.
+	 * @returns {Promise<void>}
+	 */
+	async function setPricingCustomer(customerName) {
+		const next = customerName || null;
+		if (next === pricingCustomer.value) return;
+
+		pricingCustomer.value = next;
+
+		if (!posProfile.value) return;
+
+		// Offline: cannot re-fetch; keep showing the cached (profile-priced) grid.
+		// Cart items still re-price best-effort via resolveUomPricing.
+		if (isOffline()) {
+			log.info("Pricing customer changed offline — grid keeps cached prices (fallback)");
+			return;
+		}
+
+		log.info(
+			next
+				? `Re-pricing grid for customer price list (customer=${next})`
+				: "Resetting grid to POS Profile price list"
+		);
+
+		// Force a server fetch so the grid reflects the resolved price list.
+		await loadAllItems(posProfile.value, true);
+	}
+
 	// Sorting state - for user-triggered sorting filters
 	const sortBy = ref(null); // Options: 'name', 'quantity', 'item_group', 'brand', null (no sorting)
 	const sortOrder = ref("asc"); // Options: 'asc', 'desc'
@@ -913,8 +978,10 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 				hasMore.value = !isSmallCatalog && fetchedItems.length >= INITIAL_LIMIT;
 
 				if (fetchedItems.length > 0) {
-					// Cache this batch for offline access (non-blocking)
-					offlineWorker.cacheItems(fetchedItems).catch((err) => {
+					// Cache this batch for offline access (non-blocking).
+					// Skipped when items are customer-priced to keep the offline
+					// catalog at the profile price list.
+					cacheItemsIfProfilePriced(fetchedItems)?.catch((err) => {
 						log.warn("Background item caching failed:", err.message);
 					});
 					cacheReady.value = true;
@@ -962,6 +1029,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					start: 0,
 					limit: unfilteredLimit,
 					show_variants_as_items: getShowVariantsFlag(),
+					...pricingParams(),
 				});
 				const list = response?.message || response || [];
 
@@ -974,8 +1042,9 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					// Small catalog: no more items. Large: enable infinite scroll.
 					hasMore.value = totalItemCount > unfilteredLimit;
 
-					// Cache this batch (non-blocking — background sync fills the rest)
-					offlineWorker.cacheItems(list).catch((err) => {
+					// Cache this batch (non-blocking — background sync fills the rest).
+					// Skipped when customer-priced to protect the offline catalog.
+					cacheItemsIfProfilePriced(list)?.catch((err) => {
 						log.warn("Background item caching failed:", err.message);
 					});
 
@@ -1047,6 +1116,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 				start: 0,
 				limit: effectiveLimit,
 				show_variants_as_items: getShowVariantsFlag(),
+				...pricingParams(),
 			});
 			const items = response?.message || response || [];
 			log.info(`Fetched ${items.length} items from ${firstGroup}`);
@@ -1085,6 +1155,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					start: start,
 					limit: effectiveLimit,
 					show_variants_as_items: getShowVariantsFlag(),
+					...pricingParams(),
 				});
 				return response?.message || response || [];
 			} else {
@@ -1095,6 +1166,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					start: start,
 					limit: effectiveLimit,
 					show_variants_as_items: getShowVariantsFlag(),
+					...pricingParams(),
 				});
 				return response?.message || response || [];
 			}
@@ -1121,6 +1193,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 				start: start,
 				limit: effectiveLimit,
 				show_variants_as_items: getShowVariantsFlag(),
+				...pricingParams(),
 			});
 			return response?.message || response || [];
 		} catch (error) {
@@ -1208,6 +1281,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					start: start,
 					limit: pageSize,
 					show_variants_as_items: getShowVariantsFlag(),
+					...pricingParams(),
 				});
 				items = response?.message || response || [];
 			}
@@ -1217,8 +1291,8 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 				currentOffset.value = start + items.length;
 				totalItemsLoaded.value = items.length;
 
-				// Cache for offline
-				await offlineWorker.cacheItems(items);
+				// Cache for offline (skipped when customer-priced to protect catalog)
+				await cacheItemsIfProfilePriced(items);
 
 				log.debug(`Fetched page ${page}: ${items.length} items (offset ${start})`);
 			}
@@ -1310,6 +1384,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					start: currentOffset.value,
 					limit: itemsPerPage.value,
 					show_variants_as_items: getShowVariantsFlag(),
+					...pricingParams(),
 				});
 				list = response?.message || response || [];
 			}
@@ -1327,7 +1402,8 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 				hasMore.value = list.length >= itemsPerPage.value;
 
 				// Cache new batch for offline support
-				await offlineWorker.cacheItems(list);
+				// (skipped when customer-priced to protect the offline catalog)
+				await cacheItemsIfProfilePriced(list);
 
 				log.debug(`Loaded ${list.length} more items, total: ${totalItemsLoaded.value}`);
 			} else {
@@ -1698,6 +1774,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 						start: 0,
 						limit: searchLimit, // Dynamically adjusted based on device performance
 						show_variants_as_items: getShowVariantsFlag(),
+						...pricingParams(),
 					});
 					const serverResults = response?.message || response || [];
 
@@ -1707,7 +1784,8 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 						log.success(`Found ${serverResults.length} items on server`);
 
 						// Cache server results for future searches
-						await offlineWorker.cacheItems(serverResults);
+						// (skipped when customer-priced to protect the offline catalog)
+						await cacheItemsIfProfilePriced(serverResults);
 
 						// If we didn't resolve with cache, resolve with server results
 						if (!cached || cached.length === 0) {
@@ -1768,6 +1846,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 			const result = await searchByBarcodeResource.submit({
 				barcode: barcode,
 				pos_profile: posProfile.value,
+				...pricingParams(),
 			});
 
 			const item = result?.message || result;
@@ -1967,6 +2046,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 						start: 0,
 						limit: pageSize,
 						show_variants_as_items: getShowVariantsFlag(),
+						...pricingParams(),
 					});
 					items = response?.message || response || [];
 					log.info(`Loaded ${items.length} items for "All Items" tab`);
@@ -2106,6 +2186,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					start: 0,
 					limit: pageSize,
 					show_variants_as_items: getShowVariantsFlag(),
+					...pricingParams(),
 				});
 				items = response?.message || response || [];
 				log.info(`Loaded ${items.length} items for "All Items" tab`);
@@ -2267,6 +2348,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 		searching,
 		posProfile,
 		cartItems,
+		pricingCustomer,
 		hasMore,
 		totalItemsLoaded,
 		totalServerItems,
@@ -2297,6 +2379,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 		clearSearch,
 		setSelectedItemGroup,
 		setSelectedBrand,
+		setPricingCustomer, // Re-price visible grid against customer price list
 		setCartItems, // Delegates to stock store for reservations
 		setPosProfile,
 		startBackgroundCacheSync,

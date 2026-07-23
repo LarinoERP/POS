@@ -53,6 +53,38 @@ def get_stock_availability(item_code, warehouse):
 	return flt(result[0].actual_qty) if result and result[0].actual_qty else 0.0
 
 
+def resolve_price_list(pos_profile_doc, customer=None):
+	"""Resolve the effective selling price list for a POS transaction.
+
+	When the POS Profile has "Force Price from Customer Price List"
+	(``posa_force_customer_price_list``) enabled AND a customer is selected
+	AND that customer has a ``default_price_list``, the customer's price list
+	is used. In every other case (feature off, no customer, or customer has no
+	default price list) we fall back to the profile's ``selling_price_list``.
+
+	Args:
+		pos_profile_doc (Document): The POS Profile document.
+		customer (str, optional): Customer name/id.
+
+	Returns:
+		str: The price list name to use for pricing.
+	"""
+	profile_price_list = pos_profile_doc.selling_price_list
+
+	# Feature is opt-in per POS Profile.
+	if not pos_profile_doc.get("posa_force_customer_price_list"):
+		return profile_price_list
+
+	# No customer selected (or default walk-in) → keep profile price list.
+	if not customer:
+		return profile_price_list
+
+	customer_price_list = frappe.db.get_value("Customer", customer, "default_price_list")
+
+	# Customer has no default price list configured → fall back to profile list.
+	return customer_price_list or profile_price_list
+
+
 def get_item_detail(item, doc=None, warehouse=None, price_list=None, company=None):
 	"""
 	Get comprehensive item details including batch/serial data, pricing, and stock information.
@@ -302,7 +334,7 @@ def get_item_detail(item, doc=None, warehouse=None, price_list=None, company=Non
 
 
 @frappe.whitelist()
-def search_by_barcode(barcode, pos_profile):
+def search_by_barcode(barcode, pos_profile, customer=None):
 	"""Search item by barcode"""
 	try:
 		# Parse pos_profile if it's a JSON string
@@ -375,11 +407,14 @@ def search_by_barcode(barcode, pos_profile):
 		if barcode_uom:
 			item["uom"] = barcode_uom
 
+		# Resolve effective price list (customer default list when forced, else profile list)
+		price_list = resolve_price_list(pos_profile_doc, customer)
+
 		# Get item details
 		item_details = get_item_detail(
 			item=json.dumps(item),
 			warehouse=pos_profile_doc.warehouse,
-			price_list=pos_profile_doc.selling_price_list,
+			price_list=price_list,
 			company=pos_profile_doc.company,
 		)
 
@@ -388,13 +423,13 @@ def search_by_barcode(barcode, pos_profile):
 
 		# Build uom_prices map (same pattern as get_items)
 		uom_prices = {}
-		if pos_profile_doc.selling_price_list:
+		if price_list:
 			ItemPrice = DocType("Item Price")
 			prices = (
 				frappe.qb.from_(ItemPrice)
 				.select(ItemPrice.uom, ItemPrice.price_list_rate)
 				.where(ItemPrice.item_code == item_code)
-				.where(ItemPrice.price_list == pos_profile_doc.selling_price_list)
+				.where(ItemPrice.price_list == price_list)
 				.run(as_dict=True)
 			)
 			for p in prices:
@@ -505,10 +540,13 @@ def get_batch_serial_details(item_code, warehouse):
 
 
 @frappe.whitelist()
-def get_item_variants(template_item, pos_profile):
+def get_item_variants(template_item, pos_profile, customer=None):
 	"""Get all variants for a template item with prices and stock"""
 	try:
 		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
+
+		# Resolve effective price list (customer default list when forced, else profile list)
+		price_list = resolve_price_list(pos_profile_doc, customer)
 
 		# Get all variants of this template using Query Builder for Frappe 16 compatibility
 		# Apply company filter: show variants for specific company + global variants (empty company)
@@ -569,7 +607,7 @@ def get_item_variants(template_item, pos_profile):
 				frappe.qb.from_(ItemPrice)
 				.select(ItemPrice.item_code, ItemPrice.uom, ItemPrice.price_list_rate)
 				.where(ItemPrice.item_code.isin(variant_codes))
-				.where(ItemPrice.price_list == pos_profile_doc.selling_price_list)
+				.where(ItemPrice.price_list == price_list)
 				.orderby(ItemPrice.item_code)
 				.orderby(ItemPrice.uom)
 				.run(as_dict=True)
@@ -1146,6 +1184,7 @@ def get_items(
 	include_variants=0,
 	show_variants_as_items=0,
 	brand=None,
+	customer=None,
 ):
 	"""Get items for POS with stock, price, and tax details.
 
@@ -1153,6 +1192,11 @@ def get_items(
 	- You may filter by either ``item_group`` (with hierarchical descendants) OR ``brand``.
 	- Providing BOTH ``item_group`` and ``brand`` in the same request is not allowed and will raise a validation error.
 	  This matches the POS frontend behaviour where these filters are mutually exclusive.
+
+	Pricing:
+	- ``customer`` is optional. When the POS Profile forces the customer price list
+	  and the customer has a default price list, item rates are read from that list;
+	  otherwise the profile's selling price list is used.
 	"""
 	# Enforce the same mutual exclusivity as the frontend:
 	# brand filter and item_group filter cannot be used together.
@@ -1163,6 +1207,9 @@ def get_items(
 
 	try:
 		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
+
+		# Resolve effective price list (customer default list when forced, else profile list)
+		price_list = resolve_price_list(pos_profile_doc, customer)
 
 		# Try to resolve weighted/priced barcodes if barcode_resolver is available
 		resolved_barcode_data = None
@@ -1295,7 +1342,7 @@ def get_items(
 				frappe.qb.from_(ItemPrice)
 				.select(ItemPrice.item_code, ItemPrice.uom, ItemPrice.price_list_rate)
 				.where(ItemPrice.item_code.isin(item_codes))
-				.where(ItemPrice.price_list == pos_profile_doc.selling_price_list)
+				.where(ItemPrice.price_list == price_list)
 				.orderby(ItemPrice.item_code)
 				.orderby(ItemPrice.uom)
 				.run(as_dict=True)
@@ -1393,7 +1440,7 @@ def get_items(
 					.on(Item.name == ItemPrice.item_code)
 					.select(fn.Min(ItemPrice.price_list_rate).as_("min_price"))
 					.where(Item.variant_of == item["item_code"])
-					.where(ItemPrice.price_list == pos_profile_doc.selling_price_list)
+					.where(ItemPrice.price_list == price_list)
 					.where(Item.disabled == 0)
 					.run(as_dict=True)
 				)
@@ -1518,7 +1565,13 @@ def get_items(
 
 @frappe.whitelist()
 def get_items_bulk(
-	pos_profile, item_groups=None, start=0, limit=2000, include_variants=0, show_variants_as_items=0
+	pos_profile,
+	item_groups=None,
+	start=0,
+	limit=2000,
+	include_variants=0,
+	show_variants_as_items=0,
+	customer=None,
 ):
 	"""
 	Fetch items from multiple item groups in a SINGLE query.
@@ -1531,6 +1584,10 @@ def get_items_bulk(
 		limit: Max items to return (default 2000)
 		include_variants: If 1, include variant items (for offline caching)
 		show_variants_as_items: If 1, show variants directly and exclude templates
+		customer: Optional customer; when the profile forces the customer price
+			list and the customer has a default price list, rates come from it.
+			Background offline caching passes no customer, so the profile's
+			selling price list is used for the cached catalog.
 	"""
 	try:
 		if isinstance(item_groups, str):
@@ -1607,8 +1664,8 @@ def get_items_bulk(
 				if row.uom:
 					conversion_map[row.parent][row.uom] = row.conversion_factor
 
-		# Prices
-		price_list = pos_profile_doc.selling_price_list
+		# Prices — resolve effective list (customer default when forced, else profile)
+		price_list = resolve_price_list(pos_profile_doc, customer)
 		if price_list and item_codes:
 			ItemPrice = DocType("Item Price")
 			prices = (
@@ -1794,10 +1851,13 @@ def get_item_details(item_code, pos_profile, customer=None, qty=1, uom=None):
 		if uom:
 			item["uom"] = uom
 
+		# Resolve effective price list (customer default list when forced, else profile list)
+		price_list = resolve_price_list(pos_profile_doc, customer)
+
 		return get_item_detail(
 			item=json.dumps(item),
 			warehouse=pos_profile_doc.warehouse,
-			price_list=pos_profile_doc.selling_price_list,
+			price_list=price_list,
 			company=pos_profile_doc.company,
 		)
 	except Exception as e:

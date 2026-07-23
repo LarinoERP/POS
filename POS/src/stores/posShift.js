@@ -18,6 +18,13 @@ export const usePOSShiftStore = defineStore("posShift", () => {
 	const profileWarehouse = computed(() => currentProfile.value?.warehouse);
 	const profileCompany = computed(() => currentProfile.value?.company);
 	const profileCustomer = computed(() => currentProfile.value?.customer);
+	const profilePriceList = computed(() => currentProfile.value?.selling_price_list);
+	// "Force Price from Customer Price List" toggle from the POS Profile.
+	// When enabled, pricing uses the selected customer's default price list
+	// (falling back to the profile's selling price list when the customer has none).
+	const forceCustomerPriceList = computed(
+		() => !!currentProfile.value?.posa_force_customer_price_list
+	);
 	const autoPrintEnabled = computed(() => currentProfile.value?.print_receipt_on_order_complete);
 	const writeOffAccount = computed(() => currentProfile.value?.write_off_account);
 	const writeOffCostCenter = computed(() => currentProfile.value?.write_off_cost_center);
@@ -100,6 +107,8 @@ export const usePOSShiftStore = defineStore("posShift", () => {
 		profileWarehouse,
 		profileCompany,
 		profileCustomer,
+		profilePriceList,
+		forceCustomerPriceList,
 		autoPrintEnabled,
 		writeOffAccount,
 		writeOffCostCenter,

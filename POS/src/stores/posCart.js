@@ -315,6 +315,48 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		await syncOneTimeContextForCurrentCustomer();
 	}
 
+	/**
+	 * Re-price every cart line against the currently selected customer's price
+	 * list. Used when the POS Profile forces the customer price list and the
+	 * customer changes (or is cleared). resolveUomPricing() already resolves the
+	 * effective price list server-side (customer default vs. profile) and falls
+	 * back to cached rates when offline (best-effort).
+	 *
+	 * Manually edited rates and free items are preserved. price_list_rate is
+	 * refreshed so downstream discount/tax math (recalculateItem) stays correct.
+	 *
+	 * @returns {Promise<void>}
+	 */
+	async function repriceCartForCustomer() {
+		if (invoiceItems.value.length === 0) return;
+
+		for (const item of invoiceItems.value) {
+			// Preserve free items and lines the cashier hand-edited.
+			if (item.is_free_item || item.is_rate_manually_edited === 1) continue;
+
+			try {
+				const pricing = await resolveUomPricing(
+					item,
+					item.uom || item.stock_uom,
+					item.conversion_factor || 1,
+					item.quantity
+				);
+
+				const newPriceListRate = pricing.price_list_rate ?? pricing.rate;
+				if (newPriceListRate === undefined || newPriceListRate === null) continue;
+
+				item.price_list_rate = newPriceListRate;
+				item.rate = pricing.rate ?? newPriceListRate;
+				recalculateItem(item);
+			} catch (error) {
+				// Best-effort: leave this line at its current price if pricing fails.
+				console.warn(`Failed to re-price ${item.item_code} for customer`, error);
+			}
+		}
+
+		rebuildIncrementalCache();
+	}
+
 	async function loadDefaultCustomer() {
 		await setDefaultCustomer();
 		await syncOneTimeContextForCurrentCustomer();
@@ -1882,6 +1924,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		updateItemQuantity,
 		clearCart,
 		setCustomer,
+		repriceCartForCustomer,
 		setDefaultCustomer: loadDefaultCustomer,
 		setPendingItem,
 		clearPendingItem,

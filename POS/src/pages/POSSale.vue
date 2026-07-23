@@ -1534,6 +1534,40 @@ watch(
 	}
 );
 
+/**
+ * Resolve the customer name to price against when the POS Profile forces the
+ * customer price list. Returns null for walk-in / the profile's default
+ * customer so pricing falls back to the profile's selling price list.
+ * @param {Object|string|null} customer
+ * @returns {string|null}
+ */
+function resolvePricingCustomerName(customer) {
+	if (!shiftStore.forceCustomerPriceList) return null;
+	const name = customer?.name || customer || null;
+	if (!name) return null;
+	// Default/walk-in customer uses the POS Profile price list, not a customer list.
+	if (name === shiftStore.profileCustomer) return null;
+	return name;
+}
+
+/**
+ * When "Force Price from Customer Price List" is enabled, re-price the visible
+ * grid and existing cart lines against the (new) customer's price list.
+ * No-op when the feature is off.
+ */
+async function applyCustomerPriceList(newCustomer) {
+	if (!shiftStore.forceCustomerPriceList) return;
+
+	const pricingName = resolvePricingCustomerName(newCustomer);
+
+	// Refresh the grid (server re-fetch online; cached fallback offline) and
+	// re-price cart lines in parallel.
+	await Promise.all([
+		itemStore.setPricingCustomer(pricingName),
+		cartStore.repriceCartForCustomer(),
+	]);
+}
+
 // Watch for customer changes - customer affects which offers are applicable
 watch(
 	() => cartStore.customer,
@@ -1543,6 +1577,10 @@ watch(
 
 		// Only reapply if customer actually changed
 		if (newCustomerName !== oldCustomerName) {
+			// Re-price grid + cart against the customer's price list when forced.
+			// Fire-and-forget: errors are handled/logged inside the store actions.
+			applyCustomerPriceList(newCustomer);
+
 			// Clear existing timer
 			if (offerReapplyTimer.value) {
 				clearTimeout(offerReapplyTimer.value);

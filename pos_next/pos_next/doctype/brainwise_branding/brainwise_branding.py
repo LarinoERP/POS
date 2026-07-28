@@ -15,10 +15,10 @@ from frappe.model.document import Document
 # MASTER KEY HASH - Only the person with the original key can disable branding
 # This hash was created from: secrets.token_urlsafe(32)
 # The original key must be kept secret - it is NOT stored anywhere in the code
-MASTER_KEY_HASH = "d43e11c5281905d62007251a8030a6a38020b2aac13953b087605a86c2c59ea0"
+MASTER_KEY_HASH = "af1a5ed497d9fdea768f47b4fb541d07b6590e8ddbbbf3f00f131a0ff8429baa"
 
 # Secondary protection - requires both master key AND this phrase
-PROTECTION_PHRASE_HASH = "abd6384d1df4922c0ba0c1828ff68ed4cd127e3486b91e84baec25660ba89222"
+PROTECTION_PHRASE_HASH = "1a282776f52c5ecb6b644afb21de7c85aaec5fb59b0c008980316a988524e1ff"
 
 
 class BrainWiseBranding(Document):

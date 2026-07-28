@@ -475,6 +475,7 @@
 <script setup>
 import { useToast } from "@/composables/useToast";
 import { usePOSSettingsStore } from "@/stores/posSettings";
+import { usePOSCartStore } from "@/stores/posCart";
 import { useSerialNumberStore } from "@/stores/serialNumber";
 import { getItemStock } from "@/utils/stockValidator";
 import {
@@ -488,6 +489,7 @@ import SelectInput from "@/components/common/SelectInput.vue";
 
 const { showSuccess, showError, showWarning } = useToast();
 const settingsStore = usePOSSettingsStore();
+const cartStore = usePOSCartStore();
 const serialStore = useSerialNumberStore();
 
 const props = defineProps({
@@ -738,6 +740,7 @@ async function getRateForUom(uom) {
 			const itemDetails = await getItemDetailsResource.submit({
 				item_code: localItem.value.item_code,
 				pos_profile: posProfile,
+				customer: cartStore.customer?.name || cartStore.customer || undefined,
 				qty: localQuantity.value || 1,
 				uom,
 			});

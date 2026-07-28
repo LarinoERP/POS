@@ -370,6 +370,9 @@ import { computed, nextTick, ref, watch } from "vue";
 import TranslatedHTML from "../common/TranslatedHTML.vue";
 import { offlineState } from "@/utils/offline/offlineState";
 import { getCachedVariants, cacheItems } from "@/utils/offline/items";
+import { usePOSCartStore } from "@/stores/posCart";
+
+const cartStore = usePOSCartStore();
 
 const props = defineProps({
 	modelValue: Boolean,
@@ -534,6 +537,7 @@ const variantsResource = createResource({
 		return {
 			template_item: props.item?.item_code,
 			pos_profile: props.posProfile,
+			customer: cartStore.customer?.name || cartStore.customer || undefined,
 		};
 	},
 	auto: false,

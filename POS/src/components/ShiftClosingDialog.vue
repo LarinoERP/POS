@@ -980,6 +980,8 @@ import { useToast } from "../composables/useToast";
 import { usePOSSettingsStore } from "../stores/posSettings";
 import { usePOSShiftStore } from "../stores/posShift";
 import { printEODReport } from "../utils/printEod";
+import { getSavedPrinterName } from "../utils/qzTray";
+import { usePrinterPicker } from "../composables/usePrinterPicker";
 import TranslatedHTML from "./common/TranslatedHTML.vue";
 
 const props = defineProps({
@@ -1004,6 +1006,7 @@ const open = computed({
 const { getClosingShiftData, submitClosingShift } = useShift();
 const { formatCurrency, formatQuantity, formatDateTime, formatTime } = useFormatters();
 const { showSuccess, showWarning } = useToast();
+const { requestPrinter } = usePrinterPicker();
 const posSettingsStore = usePOSSettingsStore();
 const { hideExpectedAmount } = storeToRefs(posSettingsStore);
 
@@ -1019,6 +1022,17 @@ const eodPrintFailed = ref(null);
 const retryPrintLoading = ref(false);
 const showIdleWarning = ref(false);
 let _idleWarningTimer = null;
+
+async function printEodToSelectedPrinter(closingShiftName, { pickPrinter = true } = {}) {
+	let printerName = getSavedPrinterName();
+	if (posSettingsStore.silentPrint && pickPrinter) {
+		printerName = await requestPrinter({ title: __("Print EOD Report") });
+		if (!printerName) {
+			throw new Error(__("Print cancelled"));
+		}
+	}
+	await printEODReport(closingShiftName, printerName || null);
+}
 
 // Watch dialog open state
 watch(open, async (isOpen) => {
@@ -1137,7 +1151,7 @@ async function submitClosing() {
 		const closingShiftName = result?.name ?? submitResource.data?.name;
 		if (closingShiftName) {
 			try {
-				await printEODReport(closingShiftName);
+				await printEodToSelectedPrinter(closingShiftName);
 				eodPrintFailed.value = null;
 			} catch (err) {
 				console.warn("[eod] print failed", err);
@@ -1172,7 +1186,7 @@ async function retryEodPrint() {
 
 	retryPrintLoading.value = true;
 	try {
-		await printEODReport(closingShiftName);
+		await printEodToSelectedPrinter(closingShiftName);
 		eodPrintFailed.value = null;
 		showSuccess(__("EOD report printed successfully"));
 		closeDialog();

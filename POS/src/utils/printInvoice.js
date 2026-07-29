@@ -455,7 +455,12 @@ export async function printInvoiceByName(invoiceName, printFormat = null, letter
 // Silent printing (QZ Tray — no browser dialog)
 // ============================================================================
 
-export async function silentPrintDoc(doctype, name, printFormat) {
+export async function silentPrintDoc(
+	doctype,
+	name,
+	printFormat,
+	printerName = null,
+) {
 	const result = await call("frappe.www.printview.get_html_and_style", {
 		doc: doctype,
 		name,
@@ -473,7 +478,7 @@ export async function silentPrintDoc(doctype, name, printFormat) {
 <body>${html}</body>
 </html>`;
 
-	await qzPrintHTML(fullHTML);
+	await qzPrintHTML(fullHTML, printerName);
 	return true;
 }
 
@@ -485,10 +490,15 @@ export async function silentPrintDoc(doctype, name, printFormat) {
  * formats that rely on Bootstrap layout classes may render differently.
  * Paper size and margins are controlled by the QZ Tray config in qzTray.js.
  */
-export async function silentPrintInvoice(invoiceName, printFormat = null) {
+export async function silentPrintInvoice(
+	invoiceName,
+	printFormat = null,
+	printerName = null,
+) {
 	if (isLocalOnlyInvoiceName(invoiceName)) {
 		const doc = await hydrateLocalOnlyInvoice({ name: invoiceName });
-		if (doc.items?.length > 0) return silentPrintInvoiceFromDoc(doc);
+		if (doc.items?.length > 0)
+			return silentPrintInvoiceFromDoc(doc, printerName);
 		throw new Error(
 			__(
 				"This offline receipt is no longer in browser storage. Use browser print from the success dialog after checkout."
@@ -497,7 +507,7 @@ export async function silentPrintInvoice(invoiceName, printFormat = null) {
 	}
 	const format = printFormat || DEFAULT_PRINT_FORMAT;
 
-	await silentPrintDoc("Sales Invoice", invoiceName, format);
+	await silentPrintDoc("Sales Invoice", invoiceName, format, printerName);
 	log.info(`Silent print sent for ${invoiceName}`);
 	return true;
 }
@@ -505,9 +515,9 @@ export async function silentPrintInvoice(invoiceName, printFormat = null) {
 /**
  * Silent-print a full invoice dict using the same HTML as the offline receipt fallback.
  */
-export async function silentPrintInvoiceFromDoc(invoiceData) {
+export async function silentPrintInvoiceFromDoc(invoiceData, printerName = null) {
 	const fullHTML = buildReceiptDocumentHTML(invoiceData, { includeControls: false });
-	await qzPrintHTML(fullHTML);
+	await qzPrintHTML(fullHTML, printerName);
 	log.info(`Silent print (local receipt) for ${invoiceData?.name}`);
 	flagOfflineInvoicePrinted(invoiceData?.name);
 	return true;
@@ -518,14 +528,18 @@ export async function silentPrintInvoiceFromDoc(invoiceData) {
  * silentPrintInvoice → qzPrintHTML → connect() handles auto-reconnect
  * internally, so no separate connection logic is needed here.
  */
-export async function printWithSilentFallback(invoiceData, printFormat = null) {
+export async function printWithSilentFallback(
+	invoiceData,
+	printFormat = null,
+	printerName = null,
+) {
 	invoiceData = await hydrateLocalOnlyInvoice(invoiceData);
 	const invoiceName = invoiceData?.name;
 	if (!invoiceName) throw new Error("Invalid invoice data — missing name");
 
 	if (isLocalOnlyInvoiceName(invoiceName) && invoiceData.items?.length > 0) {
 		try {
-			await silentPrintInvoiceFromDoc(invoiceData);
+			await silentPrintInvoiceFromDoc(invoiceData, printerName);
 			return { method: "silent", success: true };
 		} catch (err) {
 			log.warn("Silent local receipt failed, falling back to browser:", err?.message || err);
@@ -540,7 +554,7 @@ export async function printWithSilentFallback(invoiceData, printFormat = null) {
 	}
 
 	try {
-		await silentPrintInvoice(invoiceName, printFormat);
+		await silentPrintInvoice(invoiceName, printFormat, printerName);
 		return { method: "silent", success: true };
 	} catch (err) {
 		log.warn("Silent print failed, falling back to browser:", err?.message || err);

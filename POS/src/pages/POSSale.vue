@@ -1041,7 +1041,7 @@ import {
 	printInvoiceByName,
 	printWithSilentFallback,
 } from "@/utils/printInvoice";
-import { getSavedPrinterName, qzConnected, connect as qzConnect, disconnect as qzDisconnect } from "@/utils/qzTray";
+import { getSavedPrinterNames, qzConnected, connect as qzConnect, disconnect as qzDisconnect } from "@/utils/qzTray";
 
 import { Button, Dialog, createResource } from "frappe-ui";
 import { call } from "@/utils/apiWrapper";
@@ -3019,12 +3019,12 @@ async function handlePrintInvoice(invoiceData, { pickPrinter = true } = {}) {
 			invoiceData = offlineSnapshot;
 		}
 
-		// Silent print path — send directly to thermal printer via QZ Tray
+		// Silent print path — send directly to thermal printer(s) via QZ Tray
 		if (posSettingsStore.silentPrint) {
-			let printerName = getSavedPrinterName();
+			let printerNames = getSavedPrinterNames();
 			if (pickPrinter) {
 				try {
-					printerName = await requestPrinter({ title: __("Print Invoice") });
+					printerNames = await requestPrinter({ title: __("Print Invoice") });
 				} catch (err) {
 					log.error("Printer picker failed:", err);
 					showError(
@@ -3032,13 +3032,13 @@ async function handlePrintInvoice(invoiceData, { pickPrinter = true } = {}) {
 					);
 					return { printed: false, cancelled: false };
 				}
-				if (!printerName) return { printed: false, cancelled: true };
+				if (!printerNames?.length) return { printed: false, cancelled: true };
 			}
 
 			const result = await printWithSilentFallback(
 				invoiceData,
 				null,
-				printerName,
+				printerNames.length ? printerNames : null,
 			);
 			if (result.method === "browser") {
 				log.info("Used browser print fallback");

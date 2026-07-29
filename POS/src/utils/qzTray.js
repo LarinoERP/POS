@@ -28,21 +28,45 @@ export const qzCertStatus = ref("unknown");
 // ============================================================================
 
 const PRINTER_STORAGE_KEY = "pos_qz_printer_name";
+const PRINTERS_STORAGE_KEY = "pos_qz_printer_names";
 
-export function getSavedPrinterName() {
+/** @returns {string[]} Previously saved printer names (multi-select defaults). */
+export function getSavedPrinterNames() {
 	try {
-		return localStorage.getItem(PRINTER_STORAGE_KEY) || "";
+		const raw = localStorage.getItem(PRINTERS_STORAGE_KEY);
+		if (raw) {
+			const parsed = JSON.parse(raw);
+			if (Array.isArray(parsed)) {
+				return parsed.filter((n) => typeof n === "string" && n);
+			}
+		}
+		// Backward compat: single-printer key
+		const single = localStorage.getItem(PRINTER_STORAGE_KEY);
+		return single ? [single] : [];
 	} catch {
-		return "";
+		return [];
+	}
+}
+
+/** Primary/default printer (first saved), for settings dropdown & single-printer fallbacks. */
+export function getSavedPrinterName() {
+	return getSavedPrinterNames()[0] || "";
+}
+
+export function savePrinterNames(names) {
+	try {
+		const list = Array.isArray(names)
+			? names.filter((n) => typeof n === "string" && n)
+			: [];
+		localStorage.setItem(PRINTERS_STORAGE_KEY, JSON.stringify(list));
+		localStorage.setItem(PRINTER_STORAGE_KEY, list[0] || "");
+	} catch (e) {
+		log.warn("Failed to save printer names to localStorage:", e);
 	}
 }
 
 export function savePrinterName(name) {
-	try {
-		localStorage.setItem(PRINTER_STORAGE_KEY, name || "");
-	} catch (e) {
-		log.warn("Failed to save printer name to localStorage:", e);
-	}
+	savePrinterNames(name ? [name] : []);
 }
 
 // ============================================================================

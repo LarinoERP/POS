@@ -3,13 +3,13 @@
 		<DialogPortal>
 			<DialogOverlay
 				class="fixed inset-0 bg-black-overlay-200 dark:bg-black-overlay-700 overflow-y-auto dialog-overlay printer-picker-overlay outline-none"
-				:data-dialog="title || __('Select Printer')"
+				:data-dialog="title || __('Select Printers')"
 			>
 				<div
 					class="flex min-h-screen flex-col items-center justify-center px-4 py-4 text-center"
 				>
 					<DialogContent
-						class="my-8 inline-block w-full max-w-sm transform overflow-hidden rounded-xl bg-surface-modal text-start align-middle shadow-xl dialog-content printer-picker-content focus-visible:outline-none"
+						class="my-8 inline-block w-full max-w-md transform overflow-hidden rounded-xl bg-surface-modal text-start align-middle shadow-xl dialog-content printer-picker-content focus-visible:outline-none"
 						@escape-key-down="cancel"
 						@pointer-down-outside="onPointerDownOutside"
 					>
@@ -22,7 +22,7 @@
 												<h3
 													class="text-2xl font-semibold leading-6 text-ink-gray-9"
 												>
-													{{ title || __("Select Printer") }}
+													{{ title || __("Select Printers") }}
 												</h3>
 											</DialogTitle>
 										</div>
@@ -83,36 +83,85 @@
 										</div>
 
 										<template v-else>
-											<SelectField
-												v-model="selected"
-												:label="__('Printer')"
-												:options="printerOptions"
-												:description="
-													printers.length === 0
-														? __(
-																'No printers found. Is QZ Tray running?'
-															)
-														: __(
-																'Choose where to send this print job'
-															)
-												"
-											/>
+											<div class="flex items-center justify-between gap-2">
+												<p class="text-sm font-medium text-ink-gray-9">
+													{{ __("Printers") }}
+												</p>
+												<div class="flex items-center gap-2">
+													<button
+														type="button"
+														@click="
+															allSelected ? clearSelection() : selectAll()
+														"
+														:disabled="printers.length === 0"
+														class="text-xs px-2 py-1 text-accent hover:bg-accent-soft rounded transition-colors disabled:opacity-50"
+													>
+														{{
+															allSelected
+																? __("Clear all")
+																: __("Select all")
+														}}
+													</button>
+													<button
+														type="button"
+														@click="refreshPrinters"
+														:disabled="loadingPrinters"
+														class="text-xs px-2 py-1 bg-inset hover:bg-inset rounded transition-colors disabled:opacity-50"
+													>
+														{{ __("Refresh") }}
+													</button>
+												</div>
+											</div>
 
-											<button
-												type="button"
-												@click="refreshPrinters"
-												:disabled="loadingPrinters"
-												class="self-start px-3 py-2 text-xs bg-inset hover:bg-inset rounded transition-colors"
+											<p
+												v-if="printers.length === 0"
+												class="text-xs text-muted"
 											>
-												{{ __("Refresh") }}
-											</button>
+												{{ __("No printers found. Is QZ Tray running?") }}
+											</p>
+
+											<div
+												v-else
+												class="max-h-56 overflow-y-auto rounded-lg border border-outline-gray-2 divide-y divide-outline-gray-1"
+											>
+												<label
+													v-for="printer in printers"
+													:key="printer"
+													class="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-gray-1 transition-colors"
+												>
+													<input
+														type="checkbox"
+														class="w-4 h-4 text-blue-600 bg-white border-gray-300 rounded focus:ring-blue-500 focus:ring-1 cursor-pointer"
+														:checked="isSelected(printer)"
+														@change="togglePrinter(printer)"
+													/>
+													<span
+														class="text-sm text-ink-gray-9 truncate"
+														:title="printer"
+													>
+														{{ printer }}
+													</span>
+												</label>
+											</div>
+
+											<p class="text-xs text-muted">
+												{{
+													selectedCount === 0
+														? __("Select one or more printers")
+														: selectedCount === 1
+															? __("1 printer selected")
+															: __("{0} printers selected", [
+																	selectedCount,
+																])
+												}}
+											</p>
 
 											<CheckboxField
 												v-model="rememberDefault"
-												:label="__('Remember as default printer')"
+												:label="__('Remember as default printers')"
 												:description="
 													__(
-														'Save this printer for auto-print and as the pre-selected option next time'
+														'Save this selection for auto-print and as the pre-selected options next time'
 													)
 												"
 											/>
@@ -131,7 +180,9 @@
 									variant="solid"
 									theme="blue"
 									:disabled="
-										!selected || preparing || printers.length === 0
+										selectedCount === 0 ||
+										preparing ||
+										printers.length === 0
 									"
 									@click="confirm"
 								>
@@ -158,22 +209,25 @@ import {
 } from "reka-ui"
 import { Button } from "frappe-ui"
 import CheckboxField from "@/components/settings/CheckboxField.vue"
-import SelectField from "@/components/settings/SelectField.vue"
 import { usePrinterPicker } from "@/composables/usePrinterPicker"
 
 const {
 	visible,
 	title,
-	selected,
+	selectedCount,
+	allSelected,
 	rememberDefault,
 	preparing,
 	qzConnected,
 	qzConnecting,
 	printers,
-	printerOptions,
 	loadingPrinters,
 	handleConnect,
 	refreshPrinters,
+	isSelected,
+	togglePrinter,
+	selectAll,
+	clearSelection,
 	confirm,
 	cancel,
 } = usePrinterPicker()

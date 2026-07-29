@@ -1,10 +1,11 @@
-import { ref, watch } from "vue"
+import { computed, ref, watch } from "vue"
 import { useQzTray } from "@/composables/useQzTray"
-import { getSavedPrinterName } from "@/utils/qzTray"
+import { getSavedPrinterNames, savePrinterNames } from "@/utils/qzTray"
 
 const visible = ref(false)
 const title = ref("")
-const selected = ref("")
+/** @type {import('vue').Ref<string[]>} */
+const selected = ref([])
 const rememberDefault = ref(0)
 const preparing = ref(false)
 
@@ -18,14 +19,43 @@ watch(visible, (open) => {
 })
 
 /**
- * Promise-based printer picker for silent QZ Tray prints.
+ * Promise-based multi-printer picker for silent QZ Tray prints.
+ * Resolves to string[] of selected printers, or null if cancelled.
  * Shared singleton — mount PrinterSelectDialog once (e.g. App.vue).
  */
 export function usePrinterPicker() {
 	const qz = useQzTray()
 
+	const selectedCount = computed(() => selected.value.length)
+	const allSelected = computed(
+		() =>
+			qz.printers.value.length > 0 &&
+			selected.value.length === qz.printers.value.length,
+	)
+
+	function isSelected(name) {
+		return selected.value.includes(name)
+	}
+
+	function togglePrinter(name) {
+		const idx = selected.value.indexOf(name)
+		if (idx === -1) {
+			selected.value = [...selected.value, name]
+		} else {
+			selected.value = selected.value.filter((p) => p !== name)
+		}
+	}
+
+	function selectAll() {
+		selected.value = [...qz.printers.value]
+	}
+
+	function clearSelection() {
+		selected.value = []
+	}
+
 	async function requestPrinter(options = {}) {
-		const dialogTitle = options.title || __("Select Printer")
+		const dialogTitle = options.title || __("Select Printers")
 
 		preparing.value = true
 		try {
@@ -41,11 +71,11 @@ export function usePrinterPicker() {
 			throw new Error(__("No printers found. Is QZ Tray running?"))
 		}
 
-		const saved = getSavedPrinterName()
+		const saved = getSavedPrinterNames().filter((n) =>
+			qz.printers.value.includes(n),
+		)
 		selected.value =
-			saved && qz.printers.value.includes(saved)
-				? saved
-				: qz.printers.value[0]
+			saved.length > 0 ? [...saved] : [qz.printers.value[0]]
 		rememberDefault.value = 0
 		title.value = dialogTitle
 		visible.value = true
@@ -56,14 +86,16 @@ export function usePrinterPicker() {
 	}
 
 	function confirm() {
-		if (!selected.value) return
+		if (selected.value.length === 0) return
 		if (rememberDefault.value) {
-			qz.selectedPrinter.value = selected.value
+			savePrinterNames(selected.value)
+			qz.selectedPrinter.value = selected.value[0]
 		}
 		const resolver = resolvePromise
 		resolvePromise = null
+		const names = [...selected.value]
 		visible.value = false
-		resolver?.(selected.value)
+		resolver?.(names)
 	}
 
 	function cancel() {
@@ -77,15 +109,20 @@ export function usePrinterPicker() {
 		visible,
 		title,
 		selected,
+		selectedCount,
+		allSelected,
 		rememberDefault,
 		preparing,
 		qzConnected: qz.qzConnected,
 		qzConnecting: qz.qzConnecting,
 		printers: qz.printers,
-		printerOptions: qz.printerOptions,
 		loadingPrinters: qz.loadingPrinters,
 		handleConnect: qz.handleConnect,
 		refreshPrinters: qz.refreshPrinters,
+		isSelected,
+		togglePrinter,
+		selectAll,
+		clearSelection,
 		requestPrinter,
 		confirm,
 		cancel,

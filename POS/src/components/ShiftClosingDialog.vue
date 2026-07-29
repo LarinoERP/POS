@@ -980,7 +980,7 @@ import { useToast } from "../composables/useToast";
 import { usePOSSettingsStore } from "../stores/posSettings";
 import { usePOSShiftStore } from "../stores/posShift";
 import { printEODReport } from "../utils/printEod";
-import { getSavedPrinterName } from "../utils/qzTray";
+import { getSavedPrinterNames } from "../utils/qzTray";
 import { usePrinterPicker } from "../composables/usePrinterPicker";
 import TranslatedHTML from "./common/TranslatedHTML.vue";
 
@@ -1024,14 +1024,14 @@ const showIdleWarning = ref(false);
 let _idleWarningTimer = null;
 
 async function printEodToSelectedPrinter(closingShiftName, { pickPrinter = true } = {}) {
-	let printerName = getSavedPrinterName();
+	let printerNames = getSavedPrinterNames();
 	if (posSettingsStore.silentPrint && pickPrinter) {
-		printerName = await requestPrinter({ title: __("Print EOD Report") });
-		if (!printerName) {
+		printerNames = await requestPrinter({ title: __("Print EOD Report") });
+		if (!printerNames?.length) {
 			throw new Error(__("Print cancelled"));
 		}
 	}
-	await printEODReport(closingShiftName, printerName || null);
+	await printEODReport(closingShiftName, printerNames.length ? printerNames : null);
 }
 
 // Watch dialog open state

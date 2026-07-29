@@ -40,6 +40,15 @@ body {
 	z-index: var(--z-dialog-content-top) !important;
 }
 
+/* Printer picker stacks above another open frappe-ui dialog (invoice history, etc.) */
+body.printer-picker-open .dialog-overlay + .dialog-overlay {
+	z-index: var(--z-dialog-overlay-top) !important;
+}
+
+body.printer-picker-open .dialog-overlay + .dialog-overlay .dialog-content {
+	z-index: var(--z-dialog-content-top) !important;
+}
+
 /* Mobile touch optimizations - removes 300ms tap delay and improves scrolling */
 .touch-manipulation {
 	touch-action: manipulation;

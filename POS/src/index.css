@@ -40,12 +40,13 @@ body {
 	z-index: var(--z-dialog-content-top) !important;
 }
 
-/* Printer picker stacks above another open frappe-ui dialog (invoice history, etc.) */
-body.printer-picker-open .dialog-overlay + .dialog-overlay {
+/* Printer picker — above standard dialogs; uses reka-ui layer stack for clicks */
+.printer-picker-overlay {
 	z-index: var(--z-dialog-overlay-top) !important;
 }
 
-body.printer-picker-open .dialog-overlay + .dialog-overlay .dialog-content {
+.printer-picker-overlay .printer-picker-content,
+.printer-picker-content {
 	z-index: var(--z-dialog-content-top) !important;
 }
 

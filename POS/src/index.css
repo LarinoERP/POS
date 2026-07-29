@@ -6,6 +6,9 @@
 :root {
 	--z-dialog-overlay: 400;
 	--z-dialog-content: 500;
+	/* Stacked above other dialogs (e.g. printer picker over invoice history) */
+	--z-dialog-overlay-top: 600;
+	--z-dialog-content-top: 700;
 	--z-dropdown: 10000;
 }
 
@@ -27,6 +30,14 @@ body {
 .dialog-overlay .dialog-content,
 .dialog-content {
 	z-index: 500 !important;
+}
+
+.z-dialog-overlay-top {
+	z-index: var(--z-dialog-overlay-top) !important;
+}
+
+.z-dialog-content-top {
+	z-index: var(--z-dialog-content-top) !important;
 }
 
 /* Mobile touch optimizations - removes 300ms tap delay and improves scrolling */

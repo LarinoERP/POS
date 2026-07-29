@@ -11,7 +11,6 @@ const preparing = ref(false)
 let resolvePromise = null
 
 watch(visible, (open) => {
-	document.body.classList.toggle("printer-picker-open", open)
 	if (!open && resolvePromise) {
 		resolvePromise(null)
 		resolvePromise = null

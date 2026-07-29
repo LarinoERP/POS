@@ -1034,13 +1034,14 @@ import { cleanupUserSession } from "@/utils/sessionCleanup";
 import { offlineWorker } from "@/utils/offline/workerClient";
 import { cacheOfflineReceiptPayload } from "@/utils/offline/offlineReceiptCache";
 import { cacheInvoiceHistory, getCachedInvoiceHistory } from "@/utils/offline/sync";
+import { usePrinterPicker } from "@/composables/usePrinterPicker";
 import {
 	hydrateLocalOnlyInvoice,
 	printInvoice,
 	printInvoiceByName,
 	printWithSilentFallback,
 } from "@/utils/printInvoice";
-import { qzConnected, connect as qzConnect, disconnect as qzDisconnect } from "@/utils/qzTray";
+import { getSavedPrinterName, qzConnected, connect as qzConnect, disconnect as qzDisconnect } from "@/utils/qzTray";
 
 import { Button, Dialog, createResource } from "frappe-ui";
 import { call } from "@/utils/apiWrapper";
@@ -1097,6 +1098,7 @@ const {
 
 // Initialize toast
 const { showSuccess, showError, showWarning } = useToast();
+const { requestPrinter } = usePrinterPicker();
 
 // Initialize logger
 const log = logger.create("POSSale");
@@ -2141,13 +2143,31 @@ async function handlePaymentCompleted(paymentData) {
 
 			if (shiftStore.autoPrintEnabled || posSettingsStore.silentPrint) {
 				try {
-					await handlePrintInvoice({ name: offlineReceiptName });
-					showSuccess(
-						__(
-							"Invoice {0} saved offline and sent to printer — will sync when online",
-							[offlineReceiptName]
-						)
-					);
+					const printResult = await handlePrintInvoice({ name: offlineReceiptName });
+					if (printResult?.cancelled) {
+						uiStore.showSuccess(offlineReceiptName, grandTotal, paymentData.paid_amount);
+						showSuccess(
+							__(
+								"Invoice {0} saved offline — will sync when online",
+								[offlineReceiptName]
+							)
+						);
+					} else if (printResult?.printed) {
+						showSuccess(
+							__(
+								"Invoice {0} saved offline and sent to printer — will sync when online",
+								[offlineReceiptName]
+							)
+						);
+					} else {
+						uiStore.showSuccess(offlineReceiptName, grandTotal, paymentData.paid_amount);
+						showWarning(
+							__(
+								"Invoice {0} saved offline but print failed — open Print from the success dialog",
+								[offlineReceiptName]
+							)
+						);
+					}
 				} catch (error) {
 					log.error("Offline auto-print error:", error);
 					uiStore.showSuccess(offlineReceiptName, grandTotal, paymentData.paid_amount);
@@ -2220,8 +2240,16 @@ async function handlePaymentCompleted(paymentData) {
 
 				if (shiftStore.autoPrintEnabled || posSettingsStore.silentPrint) {
 					try {
-						await handlePrintInvoice({ name: invoiceName });
-						showSuccess(__("Invoice {0} created and sent to printer", [invoiceName]));
+						const printResult = await handlePrintInvoice({ name: invoiceName });
+						if (printResult?.cancelled) {
+							uiStore.showSuccess(invoiceName, invoiceTotal, paidAmount);
+							showSuccess(__("Invoice {0} created successfully", [invoiceName]));
+						} else if (printResult?.printed) {
+							showSuccess(__("Invoice {0} created and sent to printer", [invoiceName]));
+						} else {
+							uiStore.showSuccess(invoiceName, invoiceTotal, paidAmount);
+							showWarning(__("Invoice {0} created but print failed", [invoiceName]));
+						}
 					} catch (error) {
 						log.error("Auto-print error:", error);
 						showWarning(__("Invoice {0} created but print failed", [invoiceName]));
@@ -2940,7 +2968,8 @@ function handleViewInvoice(invoice) {
 }
 
 // Centralized print handler - uses printInvoice.js utilities
-async function handlePrintInvoice(invoiceData) {
+// Returns { printed, cancelled } for silent-print flows (checkout auto-print).
+async function handlePrintInvoice(invoiceData, { pickPrinter = true } = {}) {
 	try {
 		invoiceData = await hydrateLocalOnlyInvoice(invoiceData || {});
 		const offlineSnapshot = uiStore.lastOfflinePrintDoc;
@@ -2954,11 +2983,29 @@ async function handlePrintInvoice(invoiceData) {
 
 		// Silent print path — send directly to thermal printer via QZ Tray
 		if (posSettingsStore.silentPrint) {
-			const result = await printWithSilentFallback(invoiceData);
+			let printerName = getSavedPrinterName();
+			if (pickPrinter) {
+				try {
+					printerName = await requestPrinter({ title: __("Print Invoice") });
+				} catch (err) {
+					log.error("Printer picker failed:", err);
+					showError(
+						err?.message || __("Failed to load printers. Is QZ Tray running?"),
+					);
+					return { printed: false, cancelled: false };
+				}
+				if (!printerName) return { printed: false, cancelled: true };
+			}
+
+			const result = await printWithSilentFallback(
+				invoiceData,
+				null,
+				printerName,
+			);
 			if (result.method === "browser") {
 				log.info("Used browser print fallback");
 			}
-			return;
+			return { printed: result.success, cancelled: false };
 		}
 
 		// Standard browser print path
@@ -2969,6 +3016,7 @@ async function handlePrintInvoice(invoiceData) {
 			// printInvoiceByName will automatically fetch the print format from the invoice's POS Profile
 			await printInvoiceByName(invoiceData.name);
 		}
+		return { printed: true, cancelled: false };
 	} catch (error) {
 		log.error("Error printing invoice:", error);
 		window.frappe?.msgprint({
@@ -2976,6 +3024,7 @@ async function handlePrintInvoice(invoiceData) {
 			message: "Failed to print invoice",
 			indicator: "red",
 		});
+		return { printed: false, cancelled: false };
 	}
 }
 

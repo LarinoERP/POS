@@ -455,6 +455,15 @@ export async function printInvoiceByName(invoiceName, printFormat = null, letter
 // Silent printing (QZ Tray — no browser dialog)
 // ============================================================================
 
+/** Normalize printer arg to a non-empty string list (null → [null] for saved-default fallback). */
+function normalizePrinterTargets(printerName) {
+	if (Array.isArray(printerName)) {
+		const list = printerName.filter((n) => typeof n === "string" && n);
+		return list.length > 0 ? list : [null];
+	}
+	return [printerName || null];
+}
+
 export async function silentPrintDoc(
 	doctype,
 	name,
@@ -478,7 +487,9 @@ export async function silentPrintDoc(
 <body>${html}</body>
 </html>`;
 
-	await qzPrintHTML(fullHTML, printerName);
+	for (const printer of normalizePrinterTargets(printerName)) {
+		await qzPrintHTML(fullHTML, printer);
+	}
 	return true;
 }
 
@@ -517,7 +528,9 @@ export async function silentPrintInvoice(
  */
 export async function silentPrintInvoiceFromDoc(invoiceData, printerName = null) {
 	const fullHTML = buildReceiptDocumentHTML(invoiceData, { includeControls: false });
-	await qzPrintHTML(fullHTML, printerName);
+	for (const printer of normalizePrinterTargets(printerName)) {
+		await qzPrintHTML(fullHTML, printer);
+	}
 	log.info(`Silent print (local receipt) for ${invoiceData?.name}`);
 	flagOfflineInvoicePrinted(invoiceData?.name);
 	return true;

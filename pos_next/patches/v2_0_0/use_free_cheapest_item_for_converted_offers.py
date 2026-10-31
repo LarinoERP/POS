@@ -1,9 +1,9 @@
-"""Switch POS Offers that used "Replace Cheapest Item" to the cheapest-item-free mode.
+"""Switch POS Offers that used "Replace Cheapest Item" to the "Cheapest Item" free mode.
 
 remove_pos_offer converted them to same-item free product schemes, which only
-count one item at a time. With pos_free_cheapest_item, different eligible items
+count one item at a time. With pos_free_item_mode, different eligible items
 count together and the cheapest ones become free, as the POS Offer intended:
-for every Min Qty + Given Qty items, the cheapest Given Qty are free.
+buy Min Qty, and the cheapest Given Qty become free.
 """
 
 import json
@@ -31,16 +31,15 @@ def execute():
 
 def _convert(offer):
 	scheme = frappe.get_doc("Promotional Scheme", offer["name"])
-	if scheme.get("pos_free_cheapest_item") or len(scheme.product_discount_slabs) != 1:
+	if scheme.get("pos_free_item_mode") or len(scheme.product_discount_slabs) != 1:
 		return
 
-	free_qty = flt(offer.get("given_qty")) or 1
-	scheme.pos_free_cheapest_item = 1
+	scheme.pos_free_item_mode = "Cheapest Item"
 	scheme.mixed_conditions = 0
 	scheme.product_discount_slabs[0].update(
 		{
-			"min_qty": flt(offer.get("min_qty")) + free_qty,
-			"free_qty": free_qty,
+			"min_qty": flt(offer.get("min_qty")) or 1,
+			"free_qty": flt(offer.get("given_qty")) or 1,
 			"same_item": 1,
 			"is_recursive": 0,
 			"recurse_for": 0,

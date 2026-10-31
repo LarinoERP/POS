@@ -93,7 +93,7 @@ class Offer:
 	recurse_for: float = 0  # Give free item for every N quantity (used when is_recursive=1)
 	apply_recursion_over: float = 0  # Qty for which recursion isn't applicable
 	one_time_per_customer: int = 0  # 1 if each customer may redeem this offer only once
-	free_cheapest_item: int = 0  # 1 if the cheapest eligible items become free (mixed items count together)
+	free_item_mode: str | None = None  # "Cheapest Item" / "Next Item Added": mixed items count together
 
 	def to_dict(self) -> dict:
 		"""Convert to dictionary for API response"""
@@ -322,6 +322,11 @@ class OfferBuilder:
 
 		# Determine offer type
 		is_price_discount = rule.get("price_or_product_discount") == DiscountType.PRICE
+		free_item_mode = None if is_price_discount else rule.get("free_item_mode")
+		min_qty = flt(slab.get("min_qty", 0))
+		if free_item_mode:
+			# Mixed-item offers need Min Qty paid + Free Qty free items in the cart
+			min_qty += flt(slab.get("free_qty", 0))
 
 		return Offer(
 			name=rule["name"],
@@ -331,7 +336,7 @@ class OfferBuilder:
 			offer="Item Price" if is_price_discount else "Give Product",
 			auto=is_auto,
 			coupon_based=1 if rule.get("coupon_code_based") else 0,
-			min_qty=flt(slab.get("min_qty", 0)),
+			min_qty=min_qty,
 			max_qty=flt(slab.get("max_qty", 0)),
 			min_amt=flt(slab.get("min_amount", 0)),
 			max_amt=flt(slab.get("max_amount", 0)),
@@ -356,7 +361,7 @@ class OfferBuilder:
 			recurse_for=flt(slab.get("recurse_for", 0)) if not is_price_discount else 0,
 			apply_recursion_over=flt(slab.get("apply_recursion_over", 0)) if not is_price_discount else 0,
 			one_time_per_customer=1 if rule.get("one_time_per_customer") else 0,
-			free_cheapest_item=1 if rule.get("free_cheapest_item") and not is_price_discount else 0,
+			free_item_mode=free_item_mode,
 		)
 
 	@staticmethod
@@ -475,8 +480,7 @@ def _get_promotional_scheme_offers(company: str, date: str) -> list[Offer]:
 		SELECT
 			name, title, apply_on, selling, promotional_scheme,
 			promotional_scheme_id, coupon_code_based, one_time_per_customer,
-			price_or_product_discount, priority, valid_from, valid_upto,
-			promotional_scheme IN %(free_cheapest_schemes)s AS free_cheapest_item
+			price_or_product_discount, priority, valid_from, valid_upto
 		FROM `tabPricing Rule`
 		WHERE
 			disable = 0
@@ -487,12 +491,16 @@ def _get_promotional_scheme_offers(company: str, date: str) -> list[Offer]:
 			AND (valid_upto IS NULL OR valid_upto >= %(date)s)
 		ORDER BY priority DESC, name
 	""",
-		{"company": company, "date": date, "free_cheapest_schemes": get_free_cheapest_schemes() or [""]},
+		{"company": company, "date": date},
 		as_dict=1,
 	)
 
 	if not pricing_rules:
 		return []
+
+	free_item_modes = get_free_item_mode_schemes()
+	for rule in pricing_rules:
+		rule["free_item_mode"] = free_item_modes.get(rule["promotional_scheme"])
 
 	# Get unique scheme names
 	scheme_names = list({rule["promotional_scheme"] for rule in pricing_rules})
@@ -570,26 +578,40 @@ def _get_standalone_pricing_rule_offers(company: str, date: str) -> list[Offer]:
 
 
 # ============================================================================
-# Cheapest Item Free Offers
+# Mixed-Item Free Offers
 # ============================================================================
 #
-# ERPNext cannot express "for every N items from a group, the cheapest M are
-# free" when the items differ (a mixed-conditions product discount needs a
-# fixed free item). Promotional Schemes with pos_free_cheapest_item are
-# therefore kept out of the ERPNext engine and evaluated here.
+# ERPNext product discounts count each item separately, and with mixed
+# conditions they need a fixed free item, so "buy any 2 pizzas, get the 3rd
+# free" across different pizzas cannot be expressed. Promotional Schemes with
+# pos_free_item_mode are therefore kept out of the ERPNext engine and
+# evaluated here: for every Min Qty + Free Qty eligible units in the cart,
+# Free Qty units get a 100% discount.
 
 
-def get_free_cheapest_schemes() -> list[str]:
-	"""Names of active Promotional Schemes using the cheapest-item-free mode."""
-	if not frappe.db.has_column("Promotional Scheme", "pos_free_cheapest_item"):
-		return []
-	return frappe.get_all(
-		"Promotional Scheme", filters={"pos_free_cheapest_item": 1, "disable": 0}, pluck="name"
+class FreeItemMode:
+	"""pos_free_item_mode options"""
+
+	CHEAPEST = "Cheapest Item"
+	NEXT_ADDED = "Next Item Added"
+
+
+def get_free_item_mode_schemes() -> dict[str, str]:
+	"""Map active Promotional Schemes using a mixed-item free mode to that mode."""
+	if not frappe.db.has_column("Promotional Scheme", "pos_free_item_mode"):
+		return {}
+	return dict(
+		frappe.get_all(
+			"Promotional Scheme",
+			filters={"pos_free_item_mode": ["is", "set"], "disable": 0},
+			fields=["name", "pos_free_item_mode"],
+			as_list=True,
+		)
 	)
 
 
-def apply_cheapest_free_offers(invoice: dict, result: dict, selected_offer_names: set[str]) -> dict:
-	"""Discount the cheapest eligible units of each cheapest-item-free rule.
+def apply_mixed_free_item_offers(invoice: dict, result: dict, selected_offer_names: set[str]) -> dict:
+	"""Discount the free units of each mixed-item free rule.
 
 	Args:
 		invoice: Invoice payload sent by the POS
@@ -603,8 +625,8 @@ def apply_cheapest_free_offers(invoice: dict, result: dict, selected_offer_names
 	if not items or not invoice.get("pos_profile"):
 		return result
 
-	schemes = get_free_cheapest_schemes()
-	if not schemes:
+	modes = get_free_item_mode_schemes()
+	if not modes:
 		return result
 
 	profile = frappe.get_cached_doc("POS Profile", invoice.get("pos_profile"))
@@ -617,7 +639,8 @@ def apply_cheapest_free_offers(invoice: dict, result: dict, selected_offer_names
 		for rule in frappe.get_all(
 			"Pricing Rule",
 			filters={
-				"promotional_scheme": ["in", schemes],
+				"promotional_scheme": ["in", list(modes)],
+				"price_or_product_discount": DiscountType.PRODUCT,
 				"disable": 0,
 				"selling": 1,
 				"coupon_code_based": 0,
@@ -660,9 +683,9 @@ def apply_cheapest_free_offers(invoice: dict, result: dict, selected_offer_names
 	applied_rules = set(result.get("applied_pricing_rules") or [])
 
 	for rule in rules:
-		group_size = int(flt(rule.min_qty))
-		free_per_group = int(flt(rule.free_qty))
-		if group_size <= 0 or free_per_group <= 0:
+		buy_qty = int(flt(rule.min_qty))
+		free_qty = int(flt(rule.free_qty))
+		if buy_qty <= 0 or free_qty <= 0:
 			continue
 
 		matches = _get_rule_matcher(rule)
@@ -677,20 +700,9 @@ def apply_cheapest_free_offers(invoice: dict, result: dict, selected_offer_names
 			and (not warehouses or (item.get("warehouse") or profile.warehouse) in warehouses)
 		]
 
-		total_qty = sum(int(flt(item.get("qty"))) for item in eligible)
-		free_units = total_qty // group_size * free_per_group
-		if not free_units:
+		free_by_item = _get_free_units(eligible, buy_qty, free_qty, modes[rule.promotional_scheme])
+		if not free_by_item:
 			continue
-
-		# One entry per unit, cheapest first
-		units = sorted(
-			(flt(item.get("price_list_rate") or item.get("rate")), index)
-			for index, item in enumerate(eligible)
-			for _ in range(int(flt(item.get("qty"))))
-		)
-		free_by_item = {}
-		for _rate, index in units[:free_units]:
-			free_by_item[index] = free_by_item.get(index, 0) + 1
 
 		for index, item in enumerate(eligible):
 			rate = flt(item.get("price_list_rate") or item.get("rate"))
@@ -702,7 +714,7 @@ def apply_cheapest_free_offers(invoice: dict, result: dict, selected_offer_names
 			item["discount_amount"] = discount
 			item["discount_percentage"] = discount / (rate * qty) * 100
 			# Tag every eligible line so the POS clears stale discounts on lines
-			# that are no longer the cheapest
+			# that are no longer free
 			rule_names = [r for r in str(item.get("pricing_rules") or "").split(",") if r]
 			item["pricing_rules"] = ",".join([*rule_names, rule.name])
 
@@ -710,6 +722,33 @@ def apply_cheapest_free_offers(invoice: dict, result: dict, selected_offer_names
 
 	result["applied_pricing_rules"] = sorted(applied_rules)
 	return result
+
+
+def _get_free_units(eligible: list[dict], buy_qty: int, free_qty: int, mode: str) -> dict[int, int]:
+	"""Return {index in eligible: free units} for "buy buy_qty, get free_qty free"."""
+	# One entry per unit, in cart order
+	units = [
+		(flt(item.get("price_list_rate") or item.get("rate")), index)
+		for index, item in enumerate(eligible)
+		for _ in range(int(flt(item.get("qty"))))
+	]
+	group_size = buy_qty + free_qty
+	groups = len(units) // group_size
+
+	if mode == FreeItemMode.NEXT_ADDED:
+		# The last free_qty units of every complete group
+		free_units = [
+			units[group * group_size + offset]
+			for group in range(groups)
+			for offset in range(buy_qty, group_size)
+		]
+	else:
+		free_units = sorted(units)[: groups * free_qty]
+
+	free_by_item = {}
+	for _rate, index in free_units:
+		free_by_item[index] = free_by_item.get(index, 0) + 1
+	return free_by_item
 
 
 def _matches_party(rule, invoice: dict) -> bool:

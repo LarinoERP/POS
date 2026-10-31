@@ -1091,34 +1091,44 @@ export const usePOSCartStore = defineStore("posCart", () => {
 	}
 
 	/**
-	 * Apply a cheapest-item-free offer offline (mirrors apply_cheapest_free_offers)
-	 * Different eligible items count together: for every min_qty units in the cart,
-	 * the cheapest free_qty units get a 100% discount.
+	 * Apply a mixed-item free offer offline (mirrors apply_mixed_free_item_offers)
+	 * Different eligible items count together: for every min_qty units in the cart
+	 * (paid + free, as sent by get_offers), free_qty units get a 100% discount.
+	 * free_item_mode picks them: "Cheapest Item" or "Next Item Added" (cart order).
 	 *
 	 * @param {Object} offer - The offer to apply
 	 * @param {Array} eligibleItems - Items eligible for the offer
 	 * @returns {boolean} True if any unit was made free
 	 */
-	function applyOfflineCheapestFree(offer, eligibleItems) {
+	function applyOfflineMixedFree(offer, eligibleItems) {
 		const groupSize = Math.floor(Number.parseFloat(offer.min_qty) || 0);
-		const freePerGroup = Math.floor(Number.parseFloat(offer.free_qty) || 0);
-		const items = eligibleItems.filter(
-			(item) => !item.is_free_item && (item.price_list_rate || item.rate) > 0
-		);
-		if (groupSize <= 0 || freePerGroup <= 0) return false;
+		const freeQty = Math.floor(Number.parseFloat(offer.free_qty) || 0);
+		const buyQty = groupSize - freeQty;
+		if (buyQty <= 0 || freeQty <= 0) return false;
 
-		const totalQty = items.reduce((sum, item) => sum + Math.floor(item.quantity || 0), 0);
-		const freeUnits = Math.floor(totalQty / groupSize) * freePerGroup;
-		if (freeUnits <= 0) return false;
-
-		// One entry per unit, cheapest first
-		const units = items
+		// One entry per unit, in cart order
+		const units = eligibleItems
+			.filter((item) => !item.is_free_item && (item.price_list_rate || item.rate) > 0)
 			.flatMap((item) =>
 				Array.from({ length: Math.floor(item.quantity || 0) }, () => item)
-			)
-			.sort((a, b) => (a.price_list_rate || a.rate) - (b.price_list_rate || b.rate));
+			);
+		const groups = Math.floor(units.length / groupSize);
+		if (groups <= 0) return false;
+
+		let freeUnits;
+		if (offer.free_item_mode === "Next Item Added") {
+			// The last freeQty units of every complete group
+			freeUnits = units
+				.slice(0, groups * groupSize)
+				.filter((_, position) => position % groupSize >= buyQty);
+		} else {
+			freeUnits = [...units]
+				.sort((a, b) => (a.price_list_rate || a.rate) - (b.price_list_rate || b.rate))
+				.slice(0, groups * freeQty);
+		}
+
 		const freeByItem = new Map();
-		for (const item of units.slice(0, freeUnits)) {
+		for (const item of freeUnits) {
 			freeByItem.set(item, (freeByItem.get(item) || 0) + 1);
 		}
 
@@ -1155,8 +1165,8 @@ export const usePOSCartStore = defineStore("posCart", () => {
 
 		if (freeQty <= 0) return false;
 
-		if (offer.free_cheapest_item) {
-			return applyOfflineCheapestFree(offer, eligibleItems);
+		if (offer.free_item_mode) {
+			return applyOfflineMixedFree(offer, eligibleItems);
 		}
 
 		let applied = false;

@@ -2,7 +2,7 @@
 	<Dialog v-model="visible" :options="{ size: 'lg' }">
 		<template #body>
 			<div class="p-6 text-[15px] leading-7 text-gray-800">
-				<h3 class="text-xl font-semibold text-gray-900 mb-4">A personal note from Waleed 🤍</h3>
+				<h3 class="text-xl font-semibold text-gray-900 mb-4">A personal note from WaleedAboHashima 🤍</h3>
 				<p class="mb-3">Dear Afreen,</p>
 				<p class="mb-3">
 					I owe you a sincere apology. I shut the system down in the middle of your working day
@@ -22,9 +22,9 @@
 					Thank you for your patience, and for trusting me with Larino. I'm grateful to keep
 					working with you.
 				</p>
-				<p class="mb-5">With respect and gratitude,<br /><b>Waleed</b></p>
+				<p class="mb-5">With respect and gratitude,<br /><b>WaleedAboHashima</b></p>
 				<div class="flex justify-end">
-					<Button variant="solid" @click="visible = false">Thank you, Waleed</Button>
+					<Button variant="solid" @click="visible = false">Thank you, WaleedAboHashima</Button>
 				</div>
 			</div>
 		</template>

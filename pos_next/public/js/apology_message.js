@@ -9,7 +9,7 @@
 		if (localStorage.getItem(STORAGE_KEY)) return;
 
 		const dialog = new frappe.ui.Dialog({
-			title: "A personal note from Waleed 🤍",
+			title: "A personal note from WaleedAboHashima 🤍",
 			fields: [
 				{
 					fieldtype: "HTML",
@@ -26,11 +26,11 @@
 							sorted out between us, I'll come and talk to you first.</p>
 							<p>Thank you for your patience, and for trusting me with Larino.
 							I'm grateful to keep working with you.</p>
-							<p>With respect and gratitude,<br><b>Waleed</b></p>
+							<p>With respect and gratitude,<br><b>WaleedAboHashima</b></p>
 						</div>`,
 				},
 			],
-			primary_action_label: "Thank you, Waleed",
+			primary_action_label: "Thank you, WaleedAboHashima",
 			primary_action: () => dialog.hide(),
 		});
 		dialog.onhide = () => localStorage.setItem(STORAGE_KEY, "1");

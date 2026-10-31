@@ -93,6 +93,7 @@ class Offer:
 	recurse_for: float = 0  # Give free item for every N quantity (used when is_recursive=1)
 	apply_recursion_over: float = 0  # Qty for which recursion isn't applicable
 	one_time_per_customer: int = 0  # 1 if each customer may redeem this offer only once
+	free_cheapest_item: int = 0  # 1 if the cheapest eligible items become free (mixed items count together)
 
 	def to_dict(self) -> dict:
 		"""Convert to dictionary for API response"""
@@ -355,6 +356,7 @@ class OfferBuilder:
 			recurse_for=flt(slab.get("recurse_for", 0)) if not is_price_discount else 0,
 			apply_recursion_over=flt(slab.get("apply_recursion_over", 0)) if not is_price_discount else 0,
 			one_time_per_customer=1 if rule.get("one_time_per_customer") else 0,
+			free_cheapest_item=1 if rule.get("free_cheapest_item") and not is_price_discount else 0,
 		)
 
 	@staticmethod
@@ -473,7 +475,8 @@ def _get_promotional_scheme_offers(company: str, date: str) -> list[Offer]:
 		SELECT
 			name, title, apply_on, selling, promotional_scheme,
 			promotional_scheme_id, coupon_code_based, one_time_per_customer,
-			price_or_product_discount, priority, valid_from, valid_upto
+			price_or_product_discount, priority, valid_from, valid_upto,
+			promotional_scheme IN %(free_cheapest_schemes)s AS free_cheapest_item
 		FROM `tabPricing Rule`
 		WHERE
 			disable = 0
@@ -484,7 +487,7 @@ def _get_promotional_scheme_offers(company: str, date: str) -> list[Offer]:
 			AND (valid_upto IS NULL OR valid_upto >= %(date)s)
 		ORDER BY priority DESC, name
 	""",
-		{"company": company, "date": date},
+		{"company": company, "date": date, "free_cheapest_schemes": get_free_cheapest_schemes() or [""]},
 		as_dict=1,
 	)
 
@@ -564,6 +567,195 @@ def _get_standalone_pricing_rule_offers(company: str, date: str) -> list[Offer]:
 		offers.append(offer)
 
 	return offers
+
+
+# ============================================================================
+# Cheapest Item Free Offers
+# ============================================================================
+#
+# ERPNext cannot express "for every N items from a group, the cheapest M are
+# free" when the items differ (a mixed-conditions product discount needs a
+# fixed free item). Promotional Schemes with pos_free_cheapest_item are
+# therefore kept out of the ERPNext engine and evaluated here.
+
+
+def get_free_cheapest_schemes() -> list[str]:
+	"""Names of active Promotional Schemes using the cheapest-item-free mode."""
+	if not frappe.db.has_column("Promotional Scheme", "pos_free_cheapest_item"):
+		return []
+	return frappe.get_all(
+		"Promotional Scheme", filters={"pos_free_cheapest_item": 1, "disable": 0}, pluck="name"
+	)
+
+
+def apply_cheapest_free_offers(invoice: dict, result: dict, selected_offer_names: set[str]) -> dict:
+	"""Discount the cheapest eligible units of each cheapest-item-free rule.
+
+	Args:
+		invoice: Invoice payload sent by the POS
+		result: Response from the ERPNext pricing engine pass (modified in place)
+		selected_offer_names: Pricing Rule names selected in the POS (empty = all)
+
+	Returns:
+		The updated result
+	"""
+	items = result.get("items") or []
+	if not items or not invoice.get("pos_profile"):
+		return result
+
+	schemes = get_free_cheapest_schemes()
+	if not schemes:
+		return result
+
+	profile = frappe.get_cached_doc("POS Profile", invoice.get("pos_profile"))
+	if profile.ignore_pricing_rule:
+		return result
+
+	date = getdate(invoice.get("posting_date") or nowdate())
+	rules = [
+		rule
+		for rule in frappe.get_all(
+			"Pricing Rule",
+			filters={
+				"promotional_scheme": ["in", schemes],
+				"disable": 0,
+				"selling": 1,
+				"coupon_code_based": 0,
+				"company": profile.company,
+			},
+			fields=[
+				"name",
+				"promotional_scheme",
+				"apply_on",
+				"min_qty",
+				"free_qty",
+				"warehouse",
+				"valid_from",
+				"valid_upto",
+				"applicable_for",
+				"customer",
+				"customer_group",
+				"territory",
+			],
+			order_by="priority desc, name",
+		)
+		if (not selected_offer_names or rule.name in selected_offer_names)
+		and (not rule.valid_from or getdate(rule.valid_from) <= date)
+		and (not rule.valid_upto or getdate(rule.valid_upto) >= date)
+		and _matches_party(rule, invoice)
+	]
+	if not rules:
+		return result
+
+	item_codes = list({item.get("item_code") for item in items if item.get("item_code")})
+	item_details = {
+		row.name: row
+		for row in frappe.get_all(
+			"Item", filters={"name": ["in", item_codes]}, fields=["name", "item_group", "brand"]
+		)
+	}
+
+	# Prices from the ERPNext pass were reset; anything sent by the POS is stale
+	reset_discounts = "applied_pricing_rules" not in result
+	applied_rules = set(result.get("applied_pricing_rules") or [])
+
+	for rule in rules:
+		group_size = int(flt(rule.min_qty))
+		free_per_group = int(flt(rule.free_qty))
+		if group_size <= 0 or free_per_group <= 0:
+			continue
+
+		matches = _get_rule_matcher(rule)
+		warehouses = _get_rule_warehouses(rule)
+		eligible = [
+			item
+			for item in items
+			if not item.get("is_free_item")
+			and flt(item.get("qty")) > 0
+			and flt(item.get("price_list_rate") or item.get("rate")) > 0
+			and matches(item_details.get(item.get("item_code")))
+			and (not warehouses or (item.get("warehouse") or profile.warehouse) in warehouses)
+		]
+
+		total_qty = sum(int(flt(item.get("qty"))) for item in eligible)
+		free_units = total_qty // group_size * free_per_group
+		if not free_units:
+			continue
+
+		# One entry per unit, cheapest first
+		units = sorted(
+			(flt(item.get("price_list_rate") or item.get("rate")), index)
+			for index, item in enumerate(eligible)
+			for _ in range(int(flt(item.get("qty"))))
+		)
+		free_by_item = {}
+		for _rate, index in units[:free_units]:
+			free_by_item[index] = free_by_item.get(index, 0) + 1
+
+		for index, item in enumerate(eligible):
+			rate = flt(item.get("price_list_rate") or item.get("rate"))
+			qty = flt(item.get("qty"))
+			discount = 0 if reset_discounts else flt(item.get("discount_amount"))
+			discount = min(discount + free_by_item.get(index, 0) * rate, rate * qty)
+
+			item["price_list_rate"] = rate
+			item["discount_amount"] = discount
+			item["discount_percentage"] = discount / (rate * qty) * 100
+			# Tag every eligible line so the POS clears stale discounts on lines
+			# that are no longer the cheapest
+			rule_names = [r for r in str(item.get("pricing_rules") or "").split(",") if r]
+			item["pricing_rules"] = ",".join([*rule_names, rule.name])
+
+		applied_rules.add(rule.name)
+
+	result["applied_pricing_rules"] = sorted(applied_rules)
+	return result
+
+
+def _matches_party(rule, invoice: dict) -> bool:
+	"""Check the rule's Applicable For condition (Customer / Customer Group / Territory)."""
+	if not rule.applicable_for:
+		return True
+
+	field = frappe.scrub(rule.applicable_for)
+	if field not in ("customer", "customer_group", "territory"):
+		return False
+
+	value = invoice.get(field)
+	if not value and invoice.get("customer"):
+		value = frappe.get_cached_value("Customer", invoice.get("customer"), field)
+	return value == rule.get(field)
+
+
+def _get_rule_matcher(rule):
+	"""Return a function telling whether an Item (name, item_group, brand) is eligible."""
+	if rule.apply_on == ApplyOn.ITEM_CODE:
+		item_codes = set(
+			frappe.get_all("Pricing Rule Item Code", filters={"parent": rule.name}, pluck="item_code")
+		)
+		return lambda item: bool(item) and item.name in item_codes
+
+	if rule.apply_on == ApplyOn.ITEM_GROUP:
+		groups = set()
+		for group in frappe.get_all(
+			"Pricing Rule Item Group", filters={"parent": rule.name}, pluck="item_group"
+		):
+			groups.add(group)
+			groups.update(frappe.db.get_descendants("Item Group", group) or [])
+		return lambda item: bool(item) and item.item_group in groups
+
+	if rule.apply_on == ApplyOn.BRAND:
+		brands = set(frappe.get_all("Pricing Rule Brand", filters={"parent": rule.name}, pluck="brand"))
+		return lambda item: bool(item) and item.brand in brands
+
+	return lambda item: bool(item)
+
+
+def _get_rule_warehouses(rule) -> set[str]:
+	"""The rule's warehouse and its children (empty = any warehouse)."""
+	if not rule.warehouse:
+		return set()
+	return {rule.warehouse, *(frappe.db.get_descendants("Warehouse", rule.warehouse) or [])}
 
 
 # ============================================================================

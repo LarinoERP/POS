@@ -1091,6 +1091,47 @@ export const usePOSCartStore = defineStore("posCart", () => {
 	}
 
 	/**
+	 * Apply a cheapest-item-free offer offline (mirrors apply_cheapest_free_offers)
+	 * Different eligible items count together: for every min_qty units in the cart,
+	 * the cheapest free_qty units get a 100% discount.
+	 *
+	 * @param {Object} offer - The offer to apply
+	 * @param {Array} eligibleItems - Items eligible for the offer
+	 * @returns {boolean} True if any unit was made free
+	 */
+	function applyOfflineCheapestFree(offer, eligibleItems) {
+		const groupSize = Math.floor(Number.parseFloat(offer.min_qty) || 0);
+		const freePerGroup = Math.floor(Number.parseFloat(offer.free_qty) || 0);
+		const items = eligibleItems.filter(
+			(item) => !item.is_free_item && (item.price_list_rate || item.rate) > 0
+		);
+		if (groupSize <= 0 || freePerGroup <= 0) return false;
+
+		const totalQty = items.reduce((sum, item) => sum + Math.floor(item.quantity || 0), 0);
+		const freeUnits = Math.floor(totalQty / groupSize) * freePerGroup;
+		if (freeUnits <= 0) return false;
+
+		// One entry per unit, cheapest first
+		const units = items
+			.flatMap((item) =>
+				Array.from({ length: Math.floor(item.quantity || 0) }, () => item)
+			)
+			.sort((a, b) => (a.price_list_rate || a.rate) - (b.price_list_rate || b.rate));
+		const freeByItem = new Map();
+		for (const item of units.slice(0, freeUnits)) {
+			freeByItem.set(item, (freeByItem.get(item) || 0) + 1);
+		}
+
+		for (const [item, freeCount] of freeByItem) {
+			item.discount_percentage = (freeCount / item.quantity) * 100;
+			item.pricing_rules = [offer.name];
+			recalculateItem(item);
+		}
+
+		return true;
+	}
+
+	/**
 	 * Apply free item (product discount) offer offline
 	 * Handles: same_item (free item = purchased item) or specific free_item
 	 *
@@ -1113,6 +1154,10 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		const freeItemCode = offer.free_item;
 
 		if (freeQty <= 0) return false;
+
+		if (offer.free_cheapest_item) {
+			return applyOfflineCheapestFree(offer, eligibleItems);
+		}
 
 		let applied = false;
 

@@ -12,6 +12,8 @@ from erpnext.stock.doctype.batch.batch import get_batch_no, get_batch_qty
 from frappe import _
 from frappe.utils import cint, cstr, flt, get_datetime, nowdate, nowtime
 
+from pos_next.api.offers import apply_cheapest_free_offers, get_free_cheapest_schemes
+
 # ==========================================
 # Constants for field names (avoid typos and enable refactoring)
 # ==========================================
@@ -2888,29 +2890,43 @@ def _evaluate_transaction_offers(
 def apply_offers(invoice_data, selected_offers=None):
 	"""Calculate and apply promotional offers using ERPNext Pricing Rules.
 
+	Schemes with "Free Cheapest Items (POS)" are evaluated by POS Next itself
+	(see ``apply_cheapest_free_offers``) on top of the ERPNext result.
+
 	Args:
 	        invoice_data (str | dict): Sales Invoice payload used for offer evaluation.
 	        selected_offers (str | list | None): Optional collection of Pricing Rule names.
 	                When provided, results are filtered to only include these rules.
 	                ERPNext handles all conflict resolution based on priority.
 	"""
+	if isinstance(invoice_data, str):
+		invoice_data = json.loads(invoice_data or "{}")
+
+	if isinstance(selected_offers, str):
+		try:
+			selected_offers = json.loads(selected_offers)
+		except ValueError:
+			selected_offers = [selected_offers]
+
+	if isinstance(selected_offers, list | tuple | set):
+		selected_offer_names = {cstr(name) for name in selected_offers if cstr(name)}
+	else:
+		selected_offer_names = set()
+
+	invoice = frappe._dict(invoice_data or {})
+	result = _apply_pricing_rule_offers(invoice, selected_offer_names)
+
 	try:
-		if isinstance(invoice_data, str):
-			invoice_data = json.loads(invoice_data or "{}")
+		return apply_cheapest_free_offers(invoice, result, selected_offer_names)
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Apply Offers Error")
+		frappe.throw(_("Error applying offers: {0}").format(str(e)))
 
-		invoice = frappe._dict(invoice_data or {})
+
+def _apply_pricing_rule_offers(invoice, selected_offer_names):
+	"""Apply offers through the ERPNext pricing engine."""
+	try:
 		items = invoice.get("items") or []
-
-		if isinstance(selected_offers, str):
-			try:
-				selected_offers = json.loads(selected_offers)
-			except ValueError:
-				selected_offers = [selected_offers]
-
-		if isinstance(selected_offers, list | tuple | set):
-			selected_offer_names = {cstr(name) for name in selected_offers if cstr(name)}
-		else:
-			selected_offer_names = set()
 
 		if not items:
 			return {"items": []}
@@ -3152,6 +3168,14 @@ def apply_offers(invoice_data, selected_offers=None):
 		if selected_offer_names:
 			# Restrict available rules to the ones explicitly selected from the UI.
 			rule_map = {name: details for name, details in rule_map.items() if name in selected_offer_names}
+
+		# Cheapest-item-free schemes are applied by apply_cheapest_free_offers
+		free_cheapest_schemes = set(get_free_cheapest_schemes())
+		rule_map = {
+			name: details
+			for name, details in rule_map.items()
+			if details.promotional_scheme not in free_cheapest_schemes
+		}
 
 		if not rule_map:
 			return {"items": items}

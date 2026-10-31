@@ -433,7 +433,7 @@
 					>
 						<!-- Stock Badge - Tap to select, long press to view warehouse availability -->
 						<div
-							v-if="(item.is_stock_item || item.is_bundle) && !item.has_variants"
+							v-if="showStockBadge(item)"
 							@pointerdown="onLongPressStart(item)"
 							@pointerup="onLongPressEnd"
 							@pointercancel="clearLongPress"
@@ -830,10 +830,7 @@
 							<td class="px-2 sm:px-3 py-2 whitespace-nowrap w-[70px] sm:w-[100px]">
 								<!-- Stock Badge - Tap to select, long press to view warehouse availability -->
 								<div
-									v-if="
-										(item.is_stock_item || item.is_bundle) &&
-										!item.has_variants
-									"
+									v-if="showStockBadge(item)"
 									@pointerdown="onLongPressStart(item)"
 									@pointerup="onLongPressEnd"
 									@pointercancel="clearLongPress"
@@ -851,7 +848,10 @@
 								>
 									{{ Math.floor(item.actual_qty ?? item.stock_qty ?? 0) }}
 								</div>
-								<span v-else class="text-xs sm:text-sm text-gray-400 italic">
+								<span
+									v-else-if="!(item.is_stock_item || item.is_bundle) || item.has_variants"
+									class="text-xs sm:text-sm text-gray-400 italic"
+								>
 									{{ __("N/A") }}
 								</span>
 							</td>
@@ -1042,6 +1042,15 @@ const emit = defineEmits(["item-selected"]);
 
 // Use composables
 const { getStockStatus } = useStock();
+
+// Stock badge is hidden for variant templates and negative stock
+function showStockBadge(item) {
+	return (
+		(item.is_stock_item || item.is_bundle) &&
+		!item.has_variants &&
+		(item.actual_qty ?? item.stock_qty ?? 0) >= 0
+	);
+}
 const settingsStore = usePOSSettingsStore();
 const { showError, showWarning } = useToast();
 const { isAnyDialogOpen } = useDialogState();

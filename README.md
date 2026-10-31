@@ -254,7 +254,7 @@ Visit: `https://your-site.com/pos` or `http://localhost:8000/pos`
 
 ### Optional: Create Promotional Offers
 
-**POS Offer**: `POS Next > POS Offer > New`
+**Promotional Scheme**: `POS Next > Promotional Scheme > New` (or Promotions inside the POS)
 **POS Coupon**: `POS Next > POS Coupon > New`
 
 ## ⌨️ Keyboard Shortcuts

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **POS Offer doctype**
+  - POS Offer was never read by the POS, so offers saved there silently never applied
+  - Migration converts active POS Offers to Promotional Schemes (item offers) or POS Coupons (manual grand-total discounts) and backs up all records to `pos_offer_backup.json`
+  - Removed the unused POS Offer Detail and POS Coupon Detail child tables
+  - Workspace now links to Promotional Scheme
+
 ## [1.16.0] - 2026-04-01
 
 ### Added

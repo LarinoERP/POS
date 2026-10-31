@@ -2,17 +2,6 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("POS Coupon", {
-	setup: function (frm) {
-		frm.set_query("pos_offer", function () {
-			return {
-				filters: {
-					company: frm.doc.company,
-					coupon_based: 1,
-					disable: 0,
-				},
-			};
-		});
-	},
 	coupon_name: function (frm) {
 		if (frm.doc.__islocal === 1) {
 			frm.trigger("make_coupon_code");
@@ -38,7 +27,7 @@ frappe.ui.form.on("POS Coupon", {
 	refresh: function (frm) {
 		if (frm.doc.pricing_rule) {
 			frm.add_custom_button(__("Add/Edit Coupon Conditions"), function () {
-				frappe.set_route("Form", "POS Offer", frm.doc.pos_offer);
+				frappe.set_route("Form", "Pricing Rule", frm.doc.pricing_rule);
 			});
 		}
 	},

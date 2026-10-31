@@ -431,26 +431,6 @@
 							'group relative bg-white border border-gray-200 rounded-lg p-1.5 sm:p-2.5 touch-manipulation transition-[border-color,box-shadow] duration-100 cursor-pointer hover:border-blue-400 hover:shadow-md',
 						]"
 					>
-						<!-- Stock Badge - Tap to select, long press to view warehouse availability -->
-						<div
-							v-if="showStockBadge(item)"
-							@pointerdown="onLongPressStart(item)"
-							@pointerup="onLongPressEnd"
-							@pointercancel="clearLongPress"
-							@pointerleave="clearLongPress"
-							:class="[
-								'absolute -top-1.5 -end-1.5 sm:-top-2 sm:-end-2 rounded-md shadow-lg z-10',
-								'px-2 sm:px-2.5 py-1 sm:py-1 text-[10px] sm:text-xs font-bold',
-								'border-2 border-white cursor-pointer select-none',
-								'hover:scale-110 hover:shadow-xl transition-all duration-200',
-								getStockStatus(item.actual_qty ?? item.stock_qty ?? 0).color,
-								getStockStatus(item.actual_qty ?? item.stock_qty ?? 0).textColor,
-							]"
-							:title="__('Check availability in other warehouses')"
-						>
-							{{ Math.floor(item.actual_qty ?? item.stock_qty ?? 0) }}
-						</div>
-
 						<!-- Item Image -->
 						<div
 							class="relative aspect-square bg-gray-100 rounded-md mb-1.5 sm:mb-2 overflow-hidden"
@@ -730,12 +710,6 @@
 							</th>
 							<th
 								scope="col"
-								class="px-2 sm:px-3 py-2 sm:py-2.5 text-start text-[10px] sm:text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50 border-b-2 border-gray-200 sticky top-0 z-10 w-[70px] sm:w-[100px]"
-							>
-								{{ __("Qty") }}
-							</th>
-							<th
-								scope="col"
 								class="hidden md:table-cell px-2 sm:px-3 py-2 sm:py-2.5 text-start text-[10px] sm:text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-50 border-b-2 border-gray-200 sticky top-0 z-10 md:w-[80px]"
 							>
 								{{ __("UOM") }}
@@ -827,34 +801,6 @@
 									{{ formatCurrency(item.rate || item.price_list_rate || 0) }}
 								</div>
 							</td>
-							<td class="px-2 sm:px-3 py-2 whitespace-nowrap w-[70px] sm:w-[100px]">
-								<!-- Stock Badge - Tap to select, long press to view warehouse availability -->
-								<div
-									v-if="showStockBadge(item)"
-									@pointerdown="onLongPressStart(item)"
-									@pointerup="onLongPressEnd"
-									@pointercancel="clearLongPress"
-									@pointerleave="clearLongPress"
-									:class="[
-										'inline-block px-1.5 sm:px-3 py-0.5 sm:py-1.5 rounded-md shadow-sm',
-										'text-[10px] sm:text-sm font-bold cursor-pointer select-none',
-										'hover:scale-105 hover:shadow-md transition-all duration-200',
-										getStockStatus(item.actual_qty ?? item.stock_qty ?? 0)
-											.color,
-										getStockStatus(item.actual_qty ?? item.stock_qty ?? 0)
-											.textColor,
-									]"
-									:title="__('Check availability in other warehouses')"
-								>
-									{{ Math.floor(item.actual_qty ?? item.stock_qty ?? 0) }}
-								</div>
-								<span
-									v-else-if="!(item.is_stock_item || item.is_bundle) || item.has_variants"
-									class="text-xs sm:text-sm text-gray-400 italic"
-								>
-									{{ __("N/A") }}
-								</span>
-							</td>
 							<td
 								class="hidden md:table-cell px-2 sm:px-3 py-2 whitespace-nowrap md:w-[80px]"
 							>
@@ -865,7 +811,7 @@
 						</tr>
 						<!-- Loading More Indicator Row -->
 						<tr v-if="loadingMore">
-							<td colspan="6" class="px-2 sm:px-3 py-4 text-center bg-white">
+							<td colspan="5" class="px-2 sm:px-3 py-4 text-center bg-white">
 								<div class="flex justify-center items-center">
 									<div
 										class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"
@@ -886,14 +832,14 @@
 								totalPages >= 1
 							"
 						>
-							<td colspan="6" class="px-2 sm:px-3 py-3 text-center bg-white">
+							<td colspan="5" class="px-2 sm:px-3 py-3 text-center bg-white">
 								<p class="text-xs text-gray-400">{{ __("All items loaded") }}</p>
 							</td>
 						</tr>
 
 						<!-- Search Results Count Row -->
 						<tr v-else-if="searchTerm && filteredItems.length > 0">
-							<td colspan="6" class="px-2 sm:px-3 py-3 text-center bg-white">
+							<td colspan="5" class="px-2 sm:px-3 py-3 text-center bg-white">
 								<p class="text-xs text-gray-500">
 									{{ __("{0} items found", [filteredItems.length]) }}
 								</p>
@@ -1010,7 +956,6 @@ import LazyImage from "@/components/common/LazyImage.vue";
 import WarehouseAvailabilityDialog from "@/components/sale/WarehouseAvailabilityDialog.vue";
 import { useItemSearchStore } from "@/stores/itemSearch";
 import { usePOSSettingsStore } from "@/stores/posSettings";
-import { useStock } from "@/composables/useStock";
 import { useDialogState } from "@/composables/useDialogState";
 import { useSearchInput } from "@/composables/useSearchInput";
 import { DEFAULT_CURRENCY, formatCurrency as formatCurrencyUtil } from "@/utils/currency";
@@ -1041,16 +986,6 @@ const props = defineProps({
 const emit = defineEmits(["item-selected"]);
 
 // Use composables
-const { getStockStatus } = useStock();
-
-// Stock badge is hidden for variant templates and negative stock
-function showStockBadge(item) {
-	return (
-		(item.is_stock_item || item.is_bundle) &&
-		!item.has_variants &&
-		(item.actual_qty ?? item.stock_qty ?? 0) >= 0
-	);
-}
 const settingsStore = usePOSSettingsStore();
 const { showError, showWarning } = useToast();
 const { isAnyDialogOpen } = useDialogState();
